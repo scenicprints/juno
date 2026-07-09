@@ -79,13 +79,24 @@ input:focus { outline: none; border-color: var(--accent); }
 .banner-fertile { background: rgba(126,200,227,0.14); border: 1px solid var(--fertile); color: #d4f0fa; }
 .banner-muted { background: #241c3a; border: 1px solid var(--line); color: var(--muted); }
 
-/* mood */
+/* daily check-in */
+.checkin { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(201,167,255,0.15); }
+.field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 14px 0 8px; }
+.checkin .field-label:first-of-type { margin-top: 4px; }
+
 .mood-row { display: flex; gap: 8px; justify-content: space-between; }
 .mood {
-  flex: 1; padding: 10px 0; font-size: 24px; background: #170f26;
+  flex: 1; padding: 12px 0; font-size: 27px; background: #170f26;
   border: 1px solid var(--line); border-radius: 12px;
 }
-.mood.sel { border-color: var(--accent); background: #2c2342; transform: scale(1.05); }
+.mood.sel { border-color: var(--accent); background: #2c2342; transform: scale(1.06); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 8px 13px; border-radius: 999px; font-size: 13px;
+  background: #170f26; color: var(--muted); border: 1px solid var(--line);
+}
+.chip.on { background: var(--accent); color: #1a1226; border-color: transparent; font-weight: 600; }
 
 .inline { display: flex; align-items: center; gap: 10px; }
 .inline input { width: 90px; }

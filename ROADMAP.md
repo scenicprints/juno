@@ -50,10 +50,11 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.1 — core app built & pushed to Pages.** Sign-in (shared account), period logging,
-daily mood logging, calendar with prediction + can/cannot shading, Today can/cannot banner,
-mode toggle, live Firestore sync, installable PWA (service worker). Firebase project exists
-(`juno-a6adc`), config wired into `js/firebase.js`.
+**v0.1.1 — core app built & pushed to Pages.** Sign-in (shared account), period logging,
+a prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional note),
+calendar with prediction + can/cannot shading, Today can/cannot banner, mode toggle, live
+Firestore sync, installable PWA (service worker). Firebase project exists (`juno-a6adc`),
+config wired into `js/firebase.js`. Symptom chip list = the flat `SYMPTOMS` array in `js/ui.js`.
 
 **⚠️ Still needs the user's console steps to actually work:** (1) enable **Email/Password**
 auth, (2) create the **Firestore database**, (3) paste the **security rules** (see §7). Until
@@ -76,7 +77,7 @@ Next: user finishes the 3 console steps → test on both phones → then v0.2 (t
 
 **Firestore model (as built — shared single account):**
 - `users/{uid}/cycles/{autoId}` → `{ startDate, endDate? }`  (endDate absent = period ongoing)
-- `users/{uid}/days/{yyyy-mm-dd}` → `{ mood?, note?, flow?, tempF? }`  (tempF/flow land in v0.2)
+- `users/{uid}/days/{yyyy-mm-dd}` → `{ mood?(1–5), symptoms?[label strings], note?, flow?, tempF? }`  (tempF/flow land in v0.2)
 - `users/{uid}/meta/settings` → `{ mode: 'avoid'|'conceive'|'neutral', typicalCycleLen }`
 - **Rules (paste in Firebase console):** each account can read/write only its own `users/{uid}` tree:
   ```

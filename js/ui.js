@@ -3,8 +3,14 @@ import { predict, activePeriod } from './predict.js';
 import { window as fertWindow, classify, todayStatus } from './fertility.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.1.1';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
+// Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
+const SYMPTOMS = [
+  'Cramps', 'Headache', 'Bloating', 'Tender breasts', 'Fatigue', 'Nausea',
+  'Backache', 'Acne', 'Cravings', 'Irritable', 'Anxious', 'Insomnia',
+];
+function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note)); }
 
 // tiny DOM helper
 function el(tag, props = {}, kids = []) {
@@ -138,12 +144,15 @@ function viewToday() {
     // can / cannot banner
     const st = todayStatus(today(), c);
     const banner = el('div', { class: 'banner banner-' + st.tone }, [el('strong', { text: st.label })]);
-    if (mode() === 'avoid' && st.key !== 'learning')
+    if (mode() === 'avoid' && (st.key === 'cannot' || st.key === 'can'))
       banner.appendChild(el('div', { class: 'banner-sub', text: st.key === 'cannot'
         ? 'Use protection. Calendar timing is not reliable birth control.'
         : 'Lower risk — but not zero, and this is not contraception.' }));
     wrap.appendChild(banner);
   }
+
+  // daily check-in — prominent (mood + preset symptom chips)
+  wrap.appendChild(checkInCard(today()));
 
   // period action
   const active = activePeriod(_data.cycles);
@@ -156,26 +165,48 @@ function viewToday() {
     periodBtn, pickBtn,
   ]));
 
-  // mood
-  wrap.appendChild(moodCard(today()));
-
   wrap.appendChild(el('p', { class: 'disclaimer', text: 'Not medical advice. Fertility guidance is awareness, not contraception.' }));
   return wrap;
 }
 
-function moodCard(dateStr) {
+function checkInCard(dateStr) {
   const day = _data.days[dateStr] || {};
-  const card = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Mood' + (dateStr !== today() ? ' · ' + prettyDate(dateStr) : ' today') })]);
+  const isToday = dateStr === today();
+  const card = el('div', { class: 'card checkin' }, [
+    el('h3', { class: 'card-h', text: isToday ? 'How is she feeling today?' : 'Check-in · ' + prettyDate(dateStr) }),
+  ]);
+
+  // mood faces
+  card.appendChild(el('div', { class: 'field-label', text: 'Mood' }));
   const row = el('div', { class: 'mood-row' });
   MOODS.forEach((m, i) => {
     const val = i + 1;
     row.appendChild(el('button', {
       class: 'mood' + (day.mood === val ? ' sel' : ''),
-      onclick: () => _handlers.setDay(dateStr, { mood: val }),
+      onclick: () => _handlers.setDay(dateStr, { mood: day.mood === val ? null : val }),
     }, [m]));
   });
   card.appendChild(row);
-  const note = el('input', { type: 'text', placeholder: 'Note (optional)', value: day.note || '' });
+
+  // preset symptom chips (tap to toggle, multi-select — no typing)
+  card.appendChild(el('div', { class: 'field-label', text: 'Symptoms & conditions' }));
+  const current = new Set(day.symptoms || []);
+  const chips = el('div', { class: 'chips' });
+  SYMPTOMS.forEach((s) => {
+    const on = current.has(s);
+    chips.appendChild(el('button', {
+      class: 'chip' + (on ? ' on' : ''),
+      onclick: () => {
+        const next = new Set(current);
+        on ? next.delete(s) : next.add(s);
+        _handlers.setDay(dateStr, { symptoms: [...next] });
+      },
+    }, [s]));
+  });
+  card.appendChild(chips);
+
+  // optional free-text note (secondary)
+  const note = el('input', { type: 'text', placeholder: 'Add a note (optional)', value: day.note || '' });
   note.addEventListener('change', () => _handlers.setDay(dateStr, { note: note.value }));
   card.appendChild(note);
   return card;
@@ -206,7 +237,7 @@ function viewCalendar() {
       class: `cal-cell k-${cls}` + (ds === today() ? ' istoday' : ''),
       onclick: () => { view.sheetDate = ds; rerender(); },
     }, [String(d)]);
-    if ((_data.days[ds] || {}).mood) cell.appendChild(el('span', { class: 'dot' }));
+    if (hasLog(_data.days[ds])) cell.appendChild(el('span', { class: 'dot' }));
     grid.appendChild(cell);
   }
   wrap.appendChild(grid);
@@ -243,7 +274,7 @@ function daySheet(dateStr) {
       el('div', { class: 'sheet-grab' }),
       el('h3', { text: parse(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) }),
       actions,
-      moodCard(dateStr),
+      checkInCard(dateStr),
       el('button', { class: 'linkbtn', onclick: close }, ['Close']),
     ]),
   ]);
