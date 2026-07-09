@@ -1,0 +1,6 @@
+# Juno is a no-build static site — almost nothing to ignore.
+# Never commit secrets or personal data. (Firebase web config is NOT a secret and MAY be committed.)
+.DS_Store
+Thumbs.db
+*.log
+.env
