@@ -3,9 +3,10 @@ import { predict, activePeriod } from './predict.js';
 import { window as fertWindow, classify, todayStatus, confirmedOvulation } from './fertility.js';
 import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
+import { cycleStats } from './stats.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.4.1';
+export const APP_VERSION = '0.5.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -100,7 +101,8 @@ function rerender() {
   const shell = el('div', { class: 'app' });
   shell.appendChild(el('main', { class: 'content' }, [
     view.tab === 'today' ? viewToday() :
-    view.tab === 'calendar' ? viewCalendar() : viewSettings(),
+    view.tab === 'calendar' ? viewCalendar() :
+    view.tab === 'stats' ? viewStats() : viewSettings(),
   ]));
   shell.appendChild(nav());
   _root.appendChild(shell);
@@ -114,8 +116,66 @@ function nav() {
   return el('nav', { class: 'bottomnav' }, [
     item('today', 'Today', '●'),
     item('calendar', 'Calendar', '▦'),
+    item('stats', 'Stats', '▤'),
     item('settings', 'Settings', '⚙'),
   ]);
+}
+
+function phaseColor(phase) {
+  return { Menstrual: '#e0567f', Follicular: '#4fbf9f', Fertile: '#f4b8d0', Luteal: '#c9a7ff' }[phase] || '#a99fc4';
+}
+
+// phase ring (SVG) — shows the cycle as a donut with menstrual/follicular/fertile/luteal arcs
+// and a marker at today. Built as an SVG string (createElement doesn't do SVG namespaces).
+function phaseRing(c) {
+  const p = c.prediction;
+  const L = Math.max(p.avgLen || 28, 20);
+  const day = Math.min(Math.max(p.cycleDay, 1), L);
+  const periodLen = cycleStats(_data.cycles).avgPeriod || 5;
+
+  let fS = null, fE = null;
+  if (c.fert && p.lastStart) {
+    fS = diffDays(p.lastStart, c.fert.fertileStart) + 1;
+    fE = diffDays(p.lastStart, c.fert.fertileEnd) + 1;
+  }
+  const menEnd = Math.min(periodLen, L);
+  const COL = { men: '#e0567f', fol: '#4fbf9f', fer: '#f4b8d0', lut: '#6b5a8f' };
+  const segs = [{ d0: 1, d1: menEnd, c: COL.men }];
+  if (fS != null && fE != null && fE > menEnd) {
+    fS = Math.max(fS, menEnd + 1); fE = Math.min(fE, L);
+    if (fS <= fE) {
+      if (fS > menEnd + 1) segs.push({ d0: menEnd + 1, d1: fS - 1, c: COL.fol });
+      segs.push({ d0: fS, d1: fE, c: COL.fer });
+      if (fE < L) segs.push({ d0: fE + 1, d1: L, c: COL.lut });
+    } else { segs.push({ d0: menEnd + 1, d1: L, c: COL.fol }); }
+  } else { segs.push({ d0: menEnd + 1, d1: L, c: COL.fol }); }
+
+  const cx = 90, cy = 90, r = 72, sw = 15;
+  const polar = (ang) => { const a = (ang - 90) * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const arc = (a0, a1, col) => {
+    if (a1 - a0 >= 359.9) a1 = a0 + 359.9;
+    const [x0, y0] = polar(a0), [x1, y1] = polar(a1);
+    const large = (a1 - a0) <= 180 ? 0 : 1;
+    return `<path d="M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}" stroke="${col}" stroke-width="${sw}" fill="none"/>`;
+  };
+  const paths = segs.filter(s => s.d1 >= s.d0)
+    .map(s => arc((s.d0 - 1) / L * 360, s.d1 / L * 360, s.c)).join('');
+  const [mx, my] = polar((day - 0.5) / L * 360);
+
+  let phase = 'Luteal';
+  if (c.activePeriod || day <= menEnd) phase = 'Menstrual';
+  else if (fS != null && day >= fS && day <= fE) phase = 'Fertile';
+  else if (fS != null && day < fS) phase = 'Follicular';
+
+  const svg = `<svg viewBox="0 0 180 180" width="150" height="150" role="img" aria-label="Cycle phase">
+    <circle cx="90" cy="90" r="72" stroke="#2a2140" stroke-width="15" fill="none"/>
+    ${paths}
+    <circle cx="${mx}" cy="${my}" r="8" fill="#ffffff" stroke="#171225" stroke-width="3"/>
+    <text x="90" y="82" text-anchor="middle" fill="#ece7f7" font-size="34" font-weight="700">${day}</text>
+    <text x="90" y="99" text-anchor="middle" fill="#a99fc4" font-size="11" letter-spacing="1">CYCLE DAY</text>
+    <text x="90" y="116" text-anchor="middle" fill="${phaseColor(phase)}" font-size="12" font-weight="600" letter-spacing="1">${phase.toUpperCase()}</text>
+  </svg>`;
+  return el('div', { class: 'ring', html: svg });
 }
 
 // =================== TODAY ===================
@@ -139,11 +199,8 @@ function viewToday() {
     ]));
   } else {
     // prediction summary
-    const summary = el('div', { class: 'card' });
-    summary.appendChild(el('div', { class: 'big-num' }, [
-      el('span', { class: 'n', text: String(Math.max(p.cycleDay, 1)) }),
-      el('span', { class: 'lbl', text: 'cycle day' }),
-    ]));
+    const summary = el('div', { class: 'card summary' });
+    summary.appendChild(phaseRing(c));
     const untilTxt = p.daysUntil <= 0
       ? `Period expected around now (${prettyDate(p.nextStart)})`
       : `Next period in ~${p.daysUntil} days · around ${prettyDate(p.nextStart)}`;
@@ -336,6 +393,43 @@ function daySheet(dateStr) {
       el('button', { class: 'linkbtn', onclick: close }, ['Close']),
     ]),
   ]);
+}
+
+// =================== STATS ===================
+function viewStats() {
+  const s = cycleStats(_data.cycles);
+  const wrap = el('div', {});
+  wrap.appendChild(el('h2', { class: 'view-title', text: 'Stats' }));
+
+  if (!s.hasData) {
+    wrap.appendChild(el('div', { class: 'card' }, [
+      el('p', { class: 'muted', text: 'Once a couple of periods are logged, her cycle stats show up here — average length, range, and how regular her cycle is.' }),
+    ]));
+    return wrap;
+  }
+
+  const stat = (label, val, sub) => el('div', { class: 'statcard' }, [
+    el('div', { class: 'statval', text: val }),
+    el('div', { class: 'statlabel', text: label }),
+    sub ? el('div', { class: 'muted small', text: sub }) : null,
+  ]);
+  const grid = el('div', { class: 'stat-grid' });
+  grid.appendChild(stat('Avg cycle', s.avgCycle + ' d', `range ${s.minCycle}–${s.maxCycle} d`));
+  if (s.avgPeriod) grid.appendChild(stat('Avg period', s.avgPeriod + ' d'));
+  grid.appendChild(stat('Cycles tracked', String(s.cyclesLogged)));
+  if (s.regularity) grid.appendChild(stat('Regularity', s.regularity, `±${s.variability} d`));
+  wrap.appendChild(grid);
+
+  if (s.recent.length) {
+    const list = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Recent cycles' })]);
+    s.recent.forEach(r => list.appendChild(el('div', { class: 'cyc-row' }, [
+      el('span', { text: prettyDate(r.start) }),
+      el('span', { class: 'muted', text: r.length + ' days' }),
+    ])));
+    wrap.appendChild(list);
+  }
+  wrap.appendChild(el('p', { class: 'disclaimer', text: `Juno v${APP_VERSION}` }));
+  return wrap;
 }
 
 // =================== SETTINGS ===================

@@ -50,7 +50,8 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.4.0 — all three pillars + in-app reminders, pushed to Pages.** Sign-in (shared account), period logging,
+**v0.5.0 — feature-complete for the planned roadmap.** All three pillars + in-app reminders + a Stats
+tab + a "today" phase ring. Pushed to Pages. Sign-in (shared account), period logging,
 prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional **morning
 temperature** + note), calendar with prediction + can/cannot shading, Today can/cannot banner,
 **temperature-confirmed ovulation** ("safe again" signal), **mood/PMS forecast** on Today, mode
@@ -162,8 +163,11 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   **GitHub Action (cron)** using **FCM** to web-push stored device tokens — needs FCM/VAPID setup, a SW
   `push`/`notificationclick` handler, a Firebase service-account secret, and a Node sender script.
   iOS requires the PWA installed to the home screen (16.4+). Build only once the app is in real use.
-### v0.5 — Stats & polish
-- Cycle regularity, averages (avg/shortest/longest), a "today" phase ring.
+### v0.5 — Stats & polish  ✅ BUILT
+- **Stats tab** (`js/stats.js` → `cycleStats()`): avg cycle length + range, avg period length, cycles
+  tracked, regularity (Very/Fairly/Irregular from cycle-length stdev), recent-cycles list.
+- **"Today" phase ring** (`phaseRing()` in `js/ui.js`): SVG donut with menstrual/follicular/fertile/
+  luteal arcs and a marker at today, replacing the plain cycle-day number on the Today summary.
 ### Later / optional
 - Birth-control or pill reminders, a lighter partner-view layout, data export, PIN/biometric lock.
 

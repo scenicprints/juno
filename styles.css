@@ -59,6 +59,18 @@ input:focus { outline: none; border-color: var(--accent); }
 .big-num .n { font-size: 44px; font-weight: 700; line-height: 1; }
 .big-num .lbl { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
 
+.summary { text-align: center; }
+.ring { display: flex; justify-content: center; margin: 2px 0 6px; }
+.summary .muted, .summary .range { text-align: center; }
+
+/* stats */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.statcard { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; text-align: center; }
+.statval { font-size: 26px; font-weight: 700; }
+.statlabel { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; margin-top: 2px; }
+.cyc-row { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); }
+.cyc-row:first-of-type { border-top: none; }
+
 /* buttons */
 .btn {
   display: block; width: 100%; padding: 13px 16px; margin: 8px 0 0;
