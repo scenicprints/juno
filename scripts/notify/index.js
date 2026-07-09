@@ -36,11 +36,11 @@ function triggersFor(cycles, days, settings) {
   // 2) safe-sex window opens / ends (avoid mode)
   if (mode === 'avoid' && fert) {
     if (diffDays(t, fert.fertileStart) === 0) {
-      out.push(`The not-safe window opens today, through ${prettyDate(fert.fertileEnd)}. Use protection.`);
+      out.push(`Red light — no unprotected sex starting today. She's fertile through ${prettyDate(fert.fertileEnd)}.`);
     }
     const safeAgain = tc ? tc.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
     if (t === safeAgain) {
-      out.push(`You're past the fertile window — lower risk again. (Still not birth control.)`);
+      out.push(`Green light — you can have sex again as of today (past her fertile window). Not 100% — it's awareness, not birth control.`);
     }
   }
 

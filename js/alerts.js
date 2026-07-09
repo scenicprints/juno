@@ -1,6 +1,6 @@
 // Juno — in-app heads-up alerts. Pure function. Surfaces time-sensitive reminders at the top
 // of the app when she opens it (the free, cross-platform stand-in for OS push — see ROADMAP §8 v0.4).
-import { diffDays, today, prettyDate } from './dates.js';
+import { diffDays, today, prettyDate, fmt, addDays } from './dates.js';
 
 // ctx: { prediction, fert, mode, tempConfirm, moodF, activePeriod }
 export function alerts(ctx) {
@@ -17,9 +17,11 @@ export function alerts(ctx) {
   }
 
   // --- fertility window ---
-  if (fert && mode === 'avoid' && !tempConfirm) {
+  if (fert && mode === 'avoid') {
+    const safeAgain = tempConfirm ? tempConfirm.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
     const toOpen = diffDays(t, fert.fertileStart);
-    if (toOpen === 1) out.push({ level: 'warn', text: `Not-safe window opens tomorrow (through ${prettyDate(fert.fertileEnd)}). Plan protection.` });
+    if (!tempConfirm && toOpen === 1) out.push({ level: 'warn', text: `Red light tomorrow — her fertile window opens (through ${prettyDate(fert.fertileEnd)}). No unprotected sex.` });
+    if (t === safeAgain) out.push({ level: 'info', text: `Green light — you can have sex again (past her fertile window). Still not birth control.` });
   }
   if (fert && mode === 'conceive') {
     const toOpen = diffDays(t, fert.fertileStart);
