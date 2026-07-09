@@ -1,5 +1,5 @@
 // Juno service worker — offline app shell. Bump CACHE on each release to refresh.
-const CACHE = 'juno-v0.1.1';
+const CACHE = 'juno-v0.2.0';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './icon.svg', './manifest.webmanifest',
   './js/dates.js', './js/predict.js', './js/fertility.js', './js/firebase.js', './js/store.js', './js/ui.js',

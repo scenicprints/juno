@@ -1,9 +1,9 @@
 // Juno — UI rendering (vanilla DOM, no framework).
 import { predict, activePeriod } from './predict.js';
-import { window as fertWindow, classify, todayStatus } from './fertility.js';
+import { window as fertWindow, classify, todayStatus, confirmedOvulation } from './fertility.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.1.1';
+export const APP_VERSION = '0.2.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -37,7 +37,8 @@ function mode() { return _data?.settings?.mode || 'avoid'; }
 function ctx() {
   const p = predict(_data.cycles, _data.settings);
   const f = fertWindow(p, mode());
-  return { cycles: _data.cycles, prediction: p, fert: f, mode: mode() };
+  const tempConfirm = confirmedOvulation(_data.cycles, _data.days);
+  return { cycles: _data.cycles, prediction: p, fert: f, mode: mode(), tempConfirm };
 }
 
 // =================== AUTH VIEW ===================
@@ -149,6 +150,13 @@ function viewToday() {
         ? 'Use protection. Calendar timing is not reliable birth control.'
         : 'Lower risk — but not zero, and this is not contraception.' }));
     wrap.appendChild(banner);
+
+    // temperature-confirmed ovulation note
+    const tc = c.tempConfirm;
+    if (tc && today() >= tc.infertileFrom) {
+      wrap.appendChild(el('p', { class: 'confirm-note',
+        text: `✓ Ovulation confirmed by temperature (${prettyDate(tc.ovulation)}). The fertile window has closed for this cycle.` }));
+    }
   }
 
   // daily check-in — prominent (mood + preset symptom chips)
@@ -204,6 +212,16 @@ function checkInCard(dateStr) {
     }, [s]));
   });
   card.appendChild(chips);
+
+  // optional morning temperature (BBT) — confirms ovulation once a sustained rise appears
+  card.appendChild(el('div', { class: 'field-label', text: 'Morning temperature (optional)' }));
+  const tempIn = el('input', { class: 'temp-in', type: 'number', step: '0.05', inputmode: 'decimal',
+    placeholder: '°F  (take it right after waking)', value: day.tempF != null ? String(day.tempF) : '' });
+  tempIn.addEventListener('change', () => {
+    const v = parseFloat(tempIn.value);
+    _handlers.setDay(dateStr, { tempF: Number.isFinite(v) ? Math.round(v * 100) / 100 : null });
+  });
+  card.appendChild(tempIn);
 
   // optional free-text note (secondary)
   const note = el('input', { type: 'text', placeholder: 'Add a note (optional)', value: day.note || '' });

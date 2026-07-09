@@ -50,11 +50,13 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.1.1 — core app built & pushed to Pages.** Sign-in (shared account), period logging,
-a prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional note),
-calendar with prediction + can/cannot shading, Today can/cannot banner, mode toggle, live
-Firestore sync, installable PWA (service worker). Firebase project exists (`juno-a6adc`),
-config wired into `js/firebase.js`. Symptom chip list = the flat `SYMPTOMS` array in `js/ui.js`.
+**v0.2.0 — core + temperature built & pushed to Pages.** Sign-in (shared account), period
+logging, a prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional
+**morning temperature** + note), calendar with prediction + can/cannot shading, Today
+can/cannot banner, **temperature-confirmed ovulation** ("safe again" signal), mode toggle,
+live Firestore sync, installable PWA (service worker). Firebase project = `juno-a6adc`,
+config in `js/firebase.js`. Symptom chip list = flat `SYMPTOMS` array in `js/ui.js`.
+Temp logic = `confirmedOvulation()` in `js/fertility.js` (3 logged temps ≥0.3°F over prior-6 avg).
 
 **⚠️ Still needs the user's console steps to actually work:** (1) enable **Email/Password**
 auth, (2) create the **Firestore database**, (3) paste the **security rules** (see §7). Until
@@ -135,8 +137,12 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
 - **Can/cannot window**, Avoid-mode default, disclaimer.
 - **Mode toggle** (Avoid / Conceive / Neutral) in settings.
 - **Firebase sync** between both accounts; **installable PWA** (manifest + service worker).
-### v0.2 — Temperature
-- Optional morning temperature logging → confirm ovulation → tighten the "can again" call + narrow predictions.
+### v0.2 — Temperature  ✅ BUILT
+- Optional morning temp field in the daily check-in (`days/{date}.tempF`). `confirmedOvulation()`
+  detects the sustained thermal shift → Today shows a "✓ Ovulation confirmed by temperature" note
+  and the calendar keeps "not safe" until confirmation, then flips to safe. **Still TODO in a later
+  pass:** use temps to *narrow the next-period prediction* (currently temps only gate the safe-again
+  call, not the prediction), and handle a delayed/ambiguous shift more explicitly.
 ### v0.3 — Mood forecast
 - Surface the PMS/mood pattern once there's a cycle or two of data.
 ### v0.4 — Notifications

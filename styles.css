@@ -163,4 +163,10 @@ input:focus { outline: none; border-color: var(--accent); }
   background: #3a2f52; color: var(--text); padding: 12px 18px; border-radius: 12px;
   border: 1px solid var(--line); z-index: 40; max-width: 88%; font-size: 14px;
 }
+.confirm-note {
+  color: #c7f3e5; font-size: 13px; margin: -4px 0 14px;
+  padding: 10px 14px; background: rgba(79,191,159,0.12);
+  border: 1px solid #2f5148; border-radius: 12px;
+}
+.temp-in { max-width: 220px; }
 .disclaimer { margin-top: 18px; font-size: 12px; color: var(--muted); opacity: 0.8; text-align: center; }
