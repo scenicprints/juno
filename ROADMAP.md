@@ -50,8 +50,19 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.0 — online home established.** This roadmap + a placeholder PWA shell are live on Pages.
-**No app logic built yet.** Next: Firebase setup (§7) then the v0.1 core (§8).
+**v0.1 — core app built & pushed to Pages.** Sign-in (shared account), period logging,
+daily mood logging, calendar with prediction + can/cannot shading, Today can/cannot banner,
+mode toggle, live Firestore sync, installable PWA (service worker). Firebase project exists
+(`juno-a6adc`), config wired into `js/firebase.js`.
+
+**⚠️ Still needs the user's console steps to actually work:** (1) enable **Email/Password**
+auth, (2) create the **Firestore database**, (3) paste the **security rules** (see §7). Until
+those are done, sign-in fails and reads/writes are permission-denied (handled gracefully).
+
+**Auth model decided: ONE shared login** ("two people in one account"). Not per-user accounts.
+Data lives under `users/{uid}/...`; both phones use the same account so they share one dataset.
+
+Next: user finishes the 3 console steps → test on both phones → then v0.2 (temperature).
 
 ## 5. Architecture / planned file layout
 - `index.html` — app shell.
@@ -63,12 +74,23 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - `js/ui.js` — calendar + screens.
 - `styles.css`, `manifest.webmanifest`, `sw.js` (service worker — added in v0.1 for offline/push), `icon.svg`.
 
-**Firestore model (planned):**
-- `households/{hid}` → `{ members: [uidHis, uidHers], mode: 'avoid'|'conceive'|'neutral', typicalCycleLen }`
-- `households/{hid}/cycles/{id}` → `{ startDate, endDate? }`  (endDate absent = period ongoing)
-- `households/{hid}/days/{yyyy-mm-dd}` → `{ flow?, tempF?, mood?, symptoms?[], note? }`
-- **Rules:** only uids in `members` can read/write the household + its subcollections.
-- **Auth:** email/password, two pre-created accounts (his + hers).
+**Firestore model (as built — shared single account):**
+- `users/{uid}/cycles/{autoId}` → `{ startDate, endDate? }`  (endDate absent = period ongoing)
+- `users/{uid}/days/{yyyy-mm-dd}` → `{ mood?, note?, flow?, tempF? }`  (tempF/flow land in v0.2)
+- `users/{uid}/meta/settings` → `{ mode: 'avoid'|'conceive'|'neutral', typicalCycleLen }`
+- **Rules (paste in Firebase console):** each account can read/write only its own `users/{uid}` tree:
+  ```
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /users/{uid}/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+  ```
+- **Auth:** one shared email/password login (Email/Password provider). The app creates it on
+  first run (the "Create the shared account" toggle on the sign-in screen); both phones sign in with it.
 
 ## 6. The math (implement as pure, testable functions)
 ### Period prediction (`predict.js`)
@@ -101,7 +123,10 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 6. [ ] Push → verify on Pages on **both phones** → *Add to Home Screen*.
 
 ## 8. Batch roadmap
-### v0.1 — Core (all three pillars, minimal)  ⏳ NEXT
+### v0.1 — Core (all three pillars, minimal)  ✅ BUILT (pending user's Firebase console steps)
+*Built: shared-account sign-in, period start/end logging, daily mood (1–5 + note), month calendar
+with prediction + can/cannot shading, Today banner, Avoid/Conceive/Neutral toggle, typical-cycle-length
+setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.3 (logging is live now).*
 - Sign-in; first-run setup asks her **typical cycle length** + **last period start date**.
 - **Log** period start/end + a **quick daily mood**.
 - **Calendar** with past periods marked and predicted next-period + can/cannot shaded.

@@ -9,24 +9,13 @@
   <link rel="icon" href="icon.svg" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Juno" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="wrap">
-    <img class="logo" src="icon.svg" alt="Juno" />
-    <h1>Juno</h1>
-    <p class="tag">Period &amp; cycle tracker</p>
-
-    <div class="card">
-      <h2>Coming together</h2>
-      <p>The home is live. Period prediction, mood forecast, and the fertility window
-         land in <strong>v0.1</strong>. See <code>ROADMAP.md</code> in the repo.</p>
-    </div>
-
-    <p class="status" id="status">v0.0 · online home</p>
-    <p class="disclaimer">Not medical advice. Fertility guidance is awareness, not contraception.</p>
-  </div>
+  <div id="app" class="loading">Loading Juno…</div>
   <script type="module" src="app.js"></script>
 </body>
 </html>
