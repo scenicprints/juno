@@ -50,10 +50,11 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.6.0 — everything built, incl. real push notifications.** All three pillars + in-app reminders +
-Stats tab + phase ring + **FCM push (scheduled GitHub Action)**. Push needs 2 user setup inputs before
-it fires — see §8 v0.6 (VAPID key into `js/push.js`, service-account JSON as GitHub secret). Rest is
-live on Pages. Sign-in (shared account), period logging,
+**v0.6.1 — everything built, incl. real push notifications (setup complete, verified).** All three
+pillars + in-app reminders + Stats tab + phase ring + **FCM push (scheduled GitHub Action)**. VAPID key
+in, `FIREBASE_SERVICE_ACCOUNT` secret set, notifier run verified green. **Only remaining:** enable
+notifications on each phone (stores a token) → then delivery works; test on demand with `notify.yml`
+`test=true`. Live on Pages. Sign-in (shared account), period logging,
 prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional **morning
 temperature** + note), calendar with prediction + can/cannot shading, Today can/cannot banner,
 **temperature-confirmed ovulation** ("safe again" signal), **mood/PMS forecast** on Today, mode
@@ -171,15 +172,17 @@ Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action 
   `scripts/notify/index.js` (firebase-admin), which reuses `js/predict|fertility|mood|dates` to decide
   triggers and sends FCM. **Triggers:** period in 5 days · not-safe window opens (day of) · safe-again
   (day after fertile end, or temp-confirmed) · mood-dip starts (forecast, not on log).
-- **TWO SETUP INPUTS STILL NEEDED (blocks it working):**
-  1. **VAPID web-push public key** → Firebase → Project settings → Cloud Messaging → Web Push
-     certificates → Generate → paste the public key into `VAPID_KEY` in `js/push.js` (currently a
-     `PASTE_…` placeholder; `pushConfigured()` returns false until then).
-  2. **Service-account JSON** → Firebase → Project settings → Service accounts → Generate new private
-     key → set as GitHub secret `FIREBASE_SERVICE_ACCOUNT` (e.g. `gh secret set FIREBASE_SERVICE_ACCOUNT
-     -R scenicprints/juno < key.json`).
+- **SETUP DONE:** ✅ VAPID key is in `js/push.js` (`pushConfigured()` true). ✅ GitHub secret
+  `FIREBASE_SERVICE_ACCOUNT` is set. ✅ Sender pipeline verified — manual run of `notify.yml` succeeded
+  (`done — 0 notification(s) sent`, 0 only because no device tokens registered yet).
+- **Console note:** the redesigned Firebase console has NO "Cloud Messaging" tab under Settings. Reach
+  Web Push certs by direct URL: `console.firebase.google.com/project/juno-a6adc/settings/cloudmessaging`.
+- **REMAINING to see a notification land:** enable it on a phone (Settings → Turn on notifications;
+  iPhone must be installed to Home Screen first) → that stores a token → then delivery works.
+- **Test delivery on demand:** `notify.yml` has a `workflow_dispatch` input `test` — run with test=true
+  (`gh workflow run notify.yml -R scenicprints/juno -f test=true`) to push a one-off "it works" to all
+  registered devices without waiting for a real trigger day.
 - **iOS:** push only works if the PWA is installed to the Home Screen (16.4+) and enabled from inside it.
-- **Verify:** after both inputs, `gh workflow run "Juno notifications"` (manual dispatch) and watch the run.
 - **Caveats/TODO:** cron is UTC (13:00 ≈ US morning); no per-message de-dupe (fine — daily run + date-equality
   triggers each fire on one day); timezone is server-side, could drift a day near midnight.
 
