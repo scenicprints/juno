@@ -1,9 +1,10 @@
 // Juno — UI rendering (vanilla DOM, no framework).
 import { predict, activePeriod } from './predict.js';
 import { window as fertWindow, classify, todayStatus, confirmedOvulation } from './fertility.js';
+import { moodForecast } from './mood.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -157,6 +158,10 @@ function viewToday() {
       wrap.appendChild(el('p', { class: 'confirm-note',
         text: `✓ Ovulation confirmed by temperature (${prettyDate(tc.ovulation)}). The fertile window has closed for this cycle.` }));
     }
+
+    // mood / PMS outlook
+    const outlook = moodOutlookCard(c);
+    if (outlook) wrap.appendChild(outlook);
   }
 
   // daily check-in — prominent (mood + preset symptom chips)
@@ -227,6 +232,25 @@ function checkInCard(dateStr) {
   const note = el('input', { type: 'text', placeholder: 'Add a note (optional)', value: day.note || '' });
   note.addEventListener('change', () => _handlers.setDay(dateStr, { note: note.value }));
   card.appendChild(note);
+  return card;
+}
+
+function moodOutlookCard(c) {
+  const f = moodForecast(_data.cycles, _data.days, c.prediction);
+  if (!f.ready) return null;
+  if (!f.signal) {
+    return el('p', { class: 'mood-hint', text: 'No clear mood pattern yet — her moods look fairly even across the cycle so far. Keep logging.' });
+  }
+  const daysTxt = f.lowFrom === f.lowTo ? `${f.lowFrom} day` : `${f.lowFrom}–${f.lowTo} days`;
+  const card = el('div', { class: 'card outlook' }, [el('h3', { class: 'card-h', text: 'Mood outlook' })]);
+  card.appendChild(el('p', {
+    text: `Her mood tends to dip in the ${daysTxt} before her period` + (f.forecastText ? ` — this cycle that's ${f.forecastText}.` : '.'),
+  }));
+  if (f.topSymptoms.length)
+    card.appendChild(el('p', { class: 'muted small', text: `Often with: ${f.topSymptoms.join(', ')}.` }));
+  card.appendChild(el('p', { class: 'muted small', text: f.sampleCycles < 2
+    ? 'Early read from ~1 cycle — it sharpens as she logs more. A pattern, not a certainty.'
+    : `From ${f.sampleCycles} cycles of her logs. A pattern, not a certainty.` }));
   return card;
 }
 

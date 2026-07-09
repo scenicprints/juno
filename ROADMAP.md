@@ -50,13 +50,16 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.2.0 — core + temperature built & pushed to Pages.** Sign-in (shared account), period
-logging, a prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional
-**morning temperature** + note), calendar with prediction + can/cannot shading, Today
-can/cannot banner, **temperature-confirmed ovulation** ("safe again" signal), mode toggle,
-live Firestore sync, installable PWA (service worker). Firebase project = `juno-a6adc`,
-config in `js/firebase.js`. Symptom chip list = flat `SYMPTOMS` array in `js/ui.js`.
-Temp logic = `confirmedOvulation()` in `js/fertility.js` (3 logged temps ≥0.3°F over prior-6 avg).
+**v0.3.0 — all three pillars live, pushed to Pages.** Sign-in (shared account), period logging,
+prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional **morning
+temperature** + note), calendar with prediction + can/cannot shading, Today can/cannot banner,
+**temperature-confirmed ovulation** ("safe again" signal), **mood/PMS forecast** on Today, mode
+toggle, live Firestore sync, installable PWA. Firebase project = `juno-a6adc`, config in
+`js/firebase.js`.
+- Symptom chips = flat `SYMPTOMS` array in `js/ui.js`.
+- Temp logic = `confirmedOvulation()` in `js/fertility.js` (3 logged temps ≥0.3°F over prior-6 avg).
+- Mood forecast = `moodForecast()` in `js/mood.js` (aligns mood to days-before-period; needs
+  ≥5 logs across ≥1 completed cycle before it surfaces anything; shows a "keep logging" hint otherwise).
 
 **⚠️ Still needs the user's console steps to actually work:** (1) enable **Email/Password**
 auth, (2) create the **Firestore database**, (3) paste the **security rules** (see §7). Until
@@ -143,8 +146,11 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   and the calendar keeps "not safe" until confirmation, then flips to safe. **Still TODO in a later
   pass:** use temps to *narrow the next-period prediction* (currently temps only gate the safe-again
   call, not the prediction), and handle a delayed/ambiguous shift more explicitly.
-### v0.3 — Mood forecast
-- Surface the PMS/mood pattern once there's a cycle or two of data.
+### v0.3 — Mood forecast  ✅ BUILT
+- `moodForecast()` (`js/mood.js`) surfaces a "Mood outlook" card on Today: "her mood tends to dip
+  in the N days before her period — this cycle that's around <dates>", plus the common symptoms then.
+  Honest about sample size (1 cycle = tentative). Needs real logged data to show — until then a hint.
+  **Later:** shade the forecast low-mood days on the calendar; per-symptom (not just mood) forecasting.
 ### v0.4 — Notifications
 - Period-soon, entering/leaving the "cannot" window, late-period alert (web push; iOS needs the installed PWA).
 ### v0.5 — Stats & polish
