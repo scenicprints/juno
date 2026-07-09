@@ -169,6 +169,13 @@ input:focus { outline: none; border-color: var(--accent); }
   border: 1px solid #2f5148; border-radius: 12px;
 }
 .temp-in { max-width: 220px; }
+.alert {
+  display: flex; align-items: flex-start; gap: 10px;
+  border-radius: 12px; padding: 12px 14px; margin: 0 0 10px; font-size: 14px;
+}
+.alert-dot { font-weight: 700; }
+.alert-info { background: rgba(201,167,255,0.12); border: 1px solid var(--accent); color: #e9ddff; }
+.alert-warn { background: rgba(229,103,154,0.14); border: 1px solid var(--cannot); color: #ffd4e4; }
 .outlook { border-color: var(--pink); box-shadow: 0 0 0 1px rgba(244,184,208,0.14); }
 .mood-hint { text-align: center; color: var(--muted); font-size: 13px; margin: -2px 0 14px; }
 .disclaimer { margin-top: 18px; font-size: 12px; color: var(--muted); opacity: 0.8; text-align: center; }

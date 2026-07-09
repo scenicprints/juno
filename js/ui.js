@@ -2,9 +2,10 @@
 import { predict, activePeriod } from './predict.js';
 import { window as fertWindow, classify, todayStatus, confirmedOvulation } from './fertility.js';
 import { moodForecast } from './mood.js';
+import { alerts } from './alerts.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -39,7 +40,9 @@ function ctx() {
   const p = predict(_data.cycles, _data.settings);
   const f = fertWindow(p, mode());
   const tempConfirm = confirmedOvulation(_data.cycles, _data.days);
-  return { cycles: _data.cycles, prediction: p, fert: f, mode: mode(), tempConfirm };
+  const moodF = moodForecast(_data.cycles, _data.days, p);
+  const activePeriodFlag = !!activePeriod(_data.cycles);
+  return { cycles: _data.cycles, prediction: p, fert: f, mode: mode(), tempConfirm, moodF, activePeriod: activePeriodFlag };
 }
 
 // =================== AUTH VIEW ===================
@@ -122,6 +125,13 @@ function viewToday() {
   const wrap = el('div', {});
 
   wrap.appendChild(el('h2', { class: 'view-title', text: 'Today' }));
+
+  // heads-up alerts (imminent period / fertile window / mood dip)
+  const alertList = alerts(c);
+  alertList.forEach(a => wrap.appendChild(el('div', { class: 'alert alert-' + a.level }, [
+    el('span', { class: 'alert-dot', text: a.level === 'warn' ? '⚠' : '•' }),
+    el('span', { text: a.text }),
+  ])));
 
   if (p.state === 'none') {
     wrap.appendChild(el('div', { class: 'card' }, [

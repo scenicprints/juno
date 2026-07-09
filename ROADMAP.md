@@ -50,7 +50,7 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.3.0 — all three pillars live, pushed to Pages.** Sign-in (shared account), period logging,
+**v0.4.0 — all three pillars + in-app reminders, pushed to Pages.** Sign-in (shared account), period logging,
 prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional **morning
 temperature** + note), calendar with prediction + can/cannot shading, Today can/cannot banner,
 **temperature-confirmed ovulation** ("safe again" signal), **mood/PMS forecast** on Today, mode
@@ -60,6 +60,8 @@ toggle, live Firestore sync, installable PWA. Firebase project = `juno-a6adc`, c
 - Temp logic = `confirmedOvulation()` in `js/fertility.js` (3 logged temps ≥0.3°F over prior-6 avg).
 - Mood forecast = `moodForecast()` in `js/mood.js` (aligns mood to days-before-period; needs
   ≥5 logs across ≥1 completed cycle before it surfaces anything; shows a "keep logging" hint otherwise).
+- Heads-up alerts = `alerts()` in `js/alerts.js` (in-app reminders at top of Today). v0.4.0.
+  True OS push is deliberately NOT built — see §8 v0.4 for the free-but-heavy path if ever wanted.
 
 **⚠️ Still needs the user's console steps to actually work:** (1) enable **Email/Password**
 auth, (2) create the **Firestore database**, (3) paste the **security rules** (see §7). Until
@@ -151,8 +153,15 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   in the N days before her period — this cycle that's around <dates>", plus the common symptoms then.
   Honest about sample size (1 cycle = tentative). Needs real logged data to show — until then a hint.
   **Later:** shade the forecast low-mood days on the calendar; per-symptom (not just mood) forecasting.
-### v0.4 — Notifications
-- Period-soon, entering/leaving the "cannot" window, late-period alert (web push; iOS needs the installed PWA).
+### v0.4 — Reminders  ✅ BUILT (in-app) · true push = future opt-in
+- **Built (free, both phones):** in-app **heads-up alerts** at the top of Today — period-soon (≤3 days),
+  expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
+  and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
+- **NOT built — true OS push:** a static Pages site has no server to *send* scheduled push, and iOS
+  push needs a server via APNs (Firebase = paid Blaze plan). **Free path if wanted later:** a scheduled
+  **GitHub Action (cron)** using **FCM** to web-push stored device tokens — needs FCM/VAPID setup, a SW
+  `push`/`notificationclick` handler, a Firebase service-account secret, and a Node sender script.
+  iOS requires the PWA installed to the home screen (16.4+). Build only once the app is in real use.
 ### v0.5 — Stats & polish
 - Cycle regularity, averages (avg/shortest/longest), a "today" phase ring.
 ### Later / optional
