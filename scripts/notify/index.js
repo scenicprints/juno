@@ -14,6 +14,9 @@ if (!svc.project_id) { console.error('Missing/invalid FIREBASE_SERVICE_ACCOUNT s
 admin.initializeApp({ credential: admin.credential.cert(svc) });
 const db = admin.firestore();
 
+// TEST=true (manual workflow dispatch) → send a one-off "it works" push to every registered device.
+const TEST = process.env.TEST === 'true';
+
 // Decide which messages (if any) to send today for one user.
 function triggersFor(cycles, days, settings) {
   const mode = settings.mode || 'avoid';
@@ -67,7 +70,7 @@ async function main() {
     const tokens = (pushSnap.exists && Array.isArray(pushSnap.data().tokens)) ? pushSnap.data().tokens : [];
     if (!tokens.length) continue;
 
-    const msgs = triggersFor(cycles, days, settings);
+    const msgs = TEST ? ['Test notification from Juno — push is working.'] : triggersFor(cycles, days, settings);
     for (const body of msgs) {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,

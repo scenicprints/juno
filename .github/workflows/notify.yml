@@ -6,7 +6,12 @@ on:
   schedule:
     # 13:00 UTC daily (~8–9am US Eastern). GitHub cron is UTC and may run a few minutes late.
     - cron: '0 13 * * *'
-  workflow_dispatch: {}   # allows manual "Run workflow" for testing
+  workflow_dispatch:      # allows manual "Run workflow" for testing
+    inputs:
+      test:
+        description: 'Send a one-off test notification to all registered devices'
+        type: boolean
+        default: false
 
 jobs:
   notify:
@@ -23,4 +28,5 @@ jobs:
         working-directory: scripts/notify
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TEST: ${{ github.event.inputs.test }}
         run: node index.js
