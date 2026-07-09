@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #171225;
   --card: #211a35;
   --line: #3a2f52;
@@ -169,6 +170,8 @@ input:focus { outline: none; border-color: var(--accent); }
   border: 1px solid #2f5148; border-radius: 12px;
 }
 .temp-in { max-width: 220px; }
+.daypick-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.daypick { width: auto; margin: 0; padding: 10px 12px; }
 .alert {
   display: flex; align-items: flex-start; gap: 10px;
   border-radius: 12px; padding: 12px 14px; margin: 0 0 10px; font-size: 14px;

@@ -5,7 +5,7 @@ import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.4.1';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -182,10 +182,16 @@ function viewToday() {
   const periodBtn = active
     ? el('button', { class: 'btn', onclick: () => _handlers.endPeriod(active.id, today()) }, ['Period ended today'])
     : el('button', { class: 'btn primary', onclick: () => _handlers.startPeriod(today()) }, ['Period started today']);
-  const pickBtn = el('button', { class: 'linkbtn', onclick: () => { view.sheetDate = today(); rerender(); } }, ['Log another day…']);
+  const picker = el('input', { class: 'daypick', type: 'date', value: today(), max: today() });
+  picker.addEventListener('change', () => { if (picker.value) { view.sheetDate = picker.value; rerender(); } });
+  const pickRow = el('label', { class: 'daypick-row' }, [
+    el('span', { class: 'muted small', text: 'Log another day' }),
+    picker,
+  ]);
   wrap.appendChild(el('div', { class: 'card' }, [
     el('h3', { class: 'card-h', text: 'Period' }),
-    periodBtn, pickBtn,
+    periodBtn, pickRow,
+    el('p', { class: 'muted small', text: 'Tip: you can also tap any day on the Calendar to log it.' }),
   ]));
 
   wrap.appendChild(el('p', { class: 'disclaimer', text: 'Not medical advice. Fertility guidance is awareness, not contraception.' }));
