@@ -8,7 +8,7 @@ import { saveToken } from './store.js';
 
 // Firebase → Project settings → Cloud Messaging → Web configuration → "Web Push certificates"
 // → Generate key pair → paste the public key string here.
-export const VAPID_KEY = 'PASTE_WEB_PUSH_PUBLIC_KEY_HERE';
+export const VAPID_KEY = 'BJo3l1gfeKqiwMgQMbsZYt9ZRm4yaBkXT_VspHrhlxBt68lzsr97MRP88Gqk1tElfhuKwFtJlmCk1kSe4eKD9CI';
 
 export function pushConfigured() { return VAPID_KEY && !VAPID_KEY.startsWith('PASTE'); }
 export function permissionState() {

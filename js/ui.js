@@ -7,7 +7,7 @@ import { cycleStats } from './stats.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.6.1';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
