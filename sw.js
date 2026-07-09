@@ -1,8 +1,40 @@
-// Juno service worker — offline app shell. Bump CACHE on each release to refresh.
-const CACHE = 'juno-v0.5.0';
+// Juno service worker — offline app shell + FCM background notifications.
+// Bump CACHE on each release to refresh.
+
+// --- Firebase Cloud Messaging (compat SDK via importScripts; wrapped so offline eval can't break caching) ---
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+  firebase.initializeApp({
+    apiKey: 'AIzaSyCTSAzNoTabUNjHfurN6FKyhRYysXc9Vkc',
+    authDomain: 'juno-a6adc.firebaseapp.com',
+    projectId: 'juno-a6adc',
+    storageBucket: 'juno-a6adc.firebasestorage.app',
+    messagingSenderId: '398767139031',
+    appId: '1:398767139031:web:95667f614d559374226892',
+  });
+  firebase.messaging().onBackgroundMessage((payload) => {
+    const d = payload.data || payload.notification || {};
+    self.registration.showNotification(d.title || 'Juno', {
+      body: d.body || '', icon: './icon.svg', badge: './icon.svg',
+      data: { url: (payload.data && payload.data.url) || './' },
+    });
+  });
+} catch (e) { /* offline or messaging unsupported — notifications just won't work this load */ }
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) { if ('focus' in c) return c.focus(); }
+    return self.clients.openWindow ? self.clients.openWindow(url) : null;
+  }));
+});
+
+const CACHE = 'juno-v0.6.0';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './icon.svg', './manifest.webmanifest',
-  './js/dates.js', './js/predict.js', './js/fertility.js', './js/mood.js', './js/alerts.js', './js/stats.js', './js/firebase.js', './js/store.js', './js/ui.js',
+  './js/dates.js', './js/predict.js', './js/fertility.js', './js/mood.js', './js/alerts.js', './js/stats.js', './js/push.js', './js/firebase.js', './js/store.js', './js/ui.js',
 ];
 
 self.addEventListener('install', (e) => {

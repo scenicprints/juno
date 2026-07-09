@@ -1,0 +1,26 @@
+name: Juno notifications
+
+# Sends Juno's daily push notifications (period-soon, fertile window open/close, mood dip).
+# Requires the FIREBASE_SERVICE_ACCOUNT secret (a Firebase service-account JSON).
+on:
+  schedule:
+    # 13:00 UTC daily (~8–9am US Eastern). GitHub cron is UTC and may run a few minutes late.
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}   # allows manual "Run workflow" for testing
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: scripts/notify
+        run: npm install
+      - name: Send notifications
+        working-directory: scripts/notify
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node index.js

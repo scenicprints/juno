@@ -4,9 +4,10 @@ import { window as fertWindow, classify, todayStatus, confirmedOvulation } from 
 import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
 import { cycleStats } from './stats.js';
+import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -30,6 +31,14 @@ function el(tag, props = {}, kids = []) {
     n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   });
   return n;
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3600);
 }
 
 // ---------- module render state ----------
@@ -465,6 +474,25 @@ function viewSettings() {
     el('p', { class: 'muted small', text: 'Used for predictions until Juno has logged a couple of her cycles.' }),
     el('div', { class: 'inline' }, [lenIn, el('span', { class: 'muted', text: 'days' })]),
   ]));
+
+  // notifications
+  const nCard = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Notifications' })]);
+  if (!pushConfigured()) {
+    nCard.appendChild(el('p', { class: 'muted small', text: 'Push notifications aren’t switched on for this app yet — the web-push key still needs to be added.' }));
+  } else {
+    const perm = permissionState();
+    nCard.appendChild(el('p', { class: 'muted small', text: 'Get a heads-up for: her period in ~5 days, the not-safe window opening and ending, and an incoming mood dip.' }));
+    if (perm === 'granted') nCard.appendChild(el('p', { class: 'confirm-note', text: '✓ Notifications are on for this device.' }));
+    nCard.appendChild(el('button', {
+      class: 'btn primary',
+      onclick: async () => {
+        try { await enableNotifications(); toast('Notifications enabled on this device.'); rerender(); }
+        catch (e) { toast(e?.message || 'Could not enable notifications.'); }
+      },
+    }, [perm === 'granted' ? 'Refresh this device' : 'Turn on notifications']));
+    nCard.appendChild(el('p', { class: 'muted small', text: 'On iPhone: add Juno to the Home Screen first, then turn this on from the installed app. Enable it on each phone.' }));
+  }
+  wrap.appendChild(nCard);
 
   wrap.appendChild(el('div', { class: 'card' }, [
     el('button', { class: 'btn', onclick: () => _handlers.logout() }, ['Sign out']),

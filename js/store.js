@@ -7,7 +7,7 @@ import {
   createUserWithEmailAndPassword, signOut,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
+  collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, arrayUnion,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 // ---- auth ----
@@ -59,4 +59,8 @@ export function setDay(dateStr, patch) {
 }
 export function setSettings(patch) {
   return setDoc(doc(db, `users/${uid()}/meta/settings`), patch, { merge: true });
+}
+// store an FCM device token (the daily notifier reads users/{uid}/meta/push.tokens[])
+export function saveToken(token) {
+  return setDoc(doc(db, `users/${uid()}/meta/push`), { tokens: arrayUnion(token) }, { merge: true });
 }

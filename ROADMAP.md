@@ -50,8 +50,10 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.5.0 — feature-complete for the planned roadmap.** All three pillars + in-app reminders + a Stats
-tab + a "today" phase ring. Pushed to Pages. Sign-in (shared account), period logging,
+**v0.6.0 — everything built, incl. real push notifications.** All three pillars + in-app reminders +
+Stats tab + phase ring + **FCM push (scheduled GitHub Action)**. Push needs 2 user setup inputs before
+it fires — see §8 v0.6 (VAPID key into `js/push.js`, service-account JSON as GitHub secret). Rest is
+live on Pages. Sign-in (shared account), period logging,
 prominent **daily check-in** (mood 1–5 + tappable preset symptom chips + optional **morning
 temperature** + note), calendar with prediction + can/cannot shading, Today can/cannot banner,
 **temperature-confirmed ovulation** ("safe again" signal), **mood/PMS forecast** on Today, mode
@@ -158,11 +160,29 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
 - **Built (free, both phones):** in-app **heads-up alerts** at the top of Today — period-soon (≤3 days),
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
-- **NOT built — true OS push:** a static Pages site has no server to *send* scheduled push, and iOS
-  push needs a server via APNs (Firebase = paid Blaze plan). **Free path if wanted later:** a scheduled
-  **GitHub Action (cron)** using **FCM** to web-push stored device tokens — needs FCM/VAPID setup, a SW
-  `push`/`notificationclick` handler, a Firebase service-account secret, and a Node sender script.
-  iOS requires the PWA installed to the home screen (16.4+). Build only once the app is in real use.
+- **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### v0.6 — Push notifications  ✅ BUILT · needs 2 setup inputs to go live
+Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action + FCM.
+- **Client:** `js/push.js` (`enableNotifications()` → permission → `getToken` with VAPID → `saveToken`),
+  Settings → Notifications card, foreground `onMessage`. Token stored at `users/{uid}/meta/push.tokens[]`.
+- **Service worker:** `sw.js` now importScripts the FCM compat SDK, `onBackgroundMessage` shows the
+  notification, `notificationclick` focuses/opens the app.
+- **Sender:** `.github/workflows/notify.yml` (cron `0 13 * * *` + manual dispatch) runs
+  `scripts/notify/index.js` (firebase-admin), which reuses `js/predict|fertility|mood|dates` to decide
+  triggers and sends FCM. **Triggers:** period in 5 days · not-safe window opens (day of) · safe-again
+  (day after fertile end, or temp-confirmed) · mood-dip starts (forecast, not on log).
+- **TWO SETUP INPUTS STILL NEEDED (blocks it working):**
+  1. **VAPID web-push public key** → Firebase → Project settings → Cloud Messaging → Web Push
+     certificates → Generate → paste the public key into `VAPID_KEY` in `js/push.js` (currently a
+     `PASTE_…` placeholder; `pushConfigured()` returns false until then).
+  2. **Service-account JSON** → Firebase → Project settings → Service accounts → Generate new private
+     key → set as GitHub secret `FIREBASE_SERVICE_ACCOUNT` (e.g. `gh secret set FIREBASE_SERVICE_ACCOUNT
+     -R scenicprints/juno < key.json`).
+- **iOS:** push only works if the PWA is installed to the Home Screen (16.4+) and enabled from inside it.
+- **Verify:** after both inputs, `gh workflow run "Juno notifications"` (manual dispatch) and watch the run.
+- **Caveats/TODO:** cron is UTC (13:00 ≈ US morning); no per-message de-dupe (fine — daily run + date-equality
+  triggers each fire on one day); timezone is server-side, could drift a day near midnight.
+
 ### v0.5 — Stats & polish  ✅ BUILT
 - **Stats tab** (`js/stats.js` → `cycleStats()`): avg cycle length + range, avg period length, cycles
   tracked, regularity (Very/Fairly/Irregular from cycle-length stdev), recent-cycles list.
