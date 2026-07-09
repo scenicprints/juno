@@ -170,8 +170,10 @@ Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action 
   notification, `notificationclick` focuses/opens the app.
 - **Sender:** `.github/workflows/notify.yml` (cron `0 13 * * *` + manual dispatch) runs
   `scripts/notify/index.js` (firebase-admin), which reuses `js/predict|fertility|mood|dates` to decide
-  triggers and sends FCM. **Triggers:** period in 5 days · not-safe window opens (day of) · safe-again
-  (day after fertile end, or temp-confirmed) · mood-dip starts (forecast, not on log).
+  triggers and sends FCM. **Triggers:** period in 5 days · **Red light** = fertile window opens (can't
+  have sex) · **Green light** = day after fertile end / temp-confirmed (can have sex again) · mood-dip
+  starts (forecast, not on log). (Reworded v0.6.2 from "not-safe window opens/ends" — same logic, clearer
+  wording. Mapping: fertile window = CAN'T; before/after = CAN.)
 - **SETUP DONE:** ✅ VAPID key is in `js/push.js` (`pushConfigured()` true). ✅ GitHub secret
   `FIREBASE_SERVICE_ACCOUNT` is set. ✅ Sender pipeline verified — manual run of `notify.yml` succeeded
   (`done — 0 notification(s) sent`, 0 only because no device tokens registered yet).
