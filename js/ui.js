@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.5';
+export const APP_VERSION = '0.7.6';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -69,6 +69,30 @@ function bindBack() {
 function pushBackTrap() { try { history.pushState({ juno: 1 }, ''); } catch (_) {} }
 function overlayBack() { try { history.back(); } catch (_) { view.sheetDate = null; if (_root) rerender(); } }
 function openSheet(ds) { view.sheetDate = ds; pushBackTrap(); rerender(); }
+
+// swipe-down-to-dismiss on the bottom sheet (only when its content is scrolled to the top)
+function attachSwipeDismiss(sheetEl) {
+  let startY = 0, dragging = false, delta = 0;
+  sheetEl.addEventListener('touchstart', (e) => {
+    if (sheetEl.scrollTop > 0) { dragging = false; return; }
+    startY = e.touches[0].clientY; dragging = true; delta = 0;
+    sheetEl.style.transition = 'none';
+  }, { passive: true });
+  sheetEl.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    delta = Math.max(0, e.touches[0].clientY - startY);
+    sheetEl.style.transform = delta ? `translateY(${delta}px)` : '';
+  }, { passive: true });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheetEl.style.transition = 'transform .2s ease';
+    if (delta > 110) { sheetEl.style.transform = 'translateY(100%)'; setTimeout(overlayBack, 180); }
+    else { sheetEl.style.transform = ''; }
+  };
+  sheetEl.addEventListener('touchend', end, { passive: true });
+  sheetEl.addEventListener('touchcancel', end, { passive: true });
+}
 
 function mode() { return _data?.settings?.mode || 'avoid'; }
 function ctx() {
@@ -545,15 +569,15 @@ function daySheet(dateStr) {
   if (c)
     actions.appendChild(el('button', { class: 'btn danger', onclick: () => { _handlers.deleteCycle(c.id); close(); } }, ['Remove this period entry']));
 
-  return el('div', { class: 'sheet-bg', onclick: onCloseBg }, [
-    el('div', { class: 'sheet' }, [
-      el('div', { class: 'sheet-grab' }),
-      el('h3', { text: parse(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) }),
-      actions,
-      checkInCard(dateStr),
-      el('button', { class: 'linkbtn', onclick: close }, ['Close']),
-    ]),
+  const sheetEl = el('div', { class: 'sheet' }, [
+    el('div', { class: 'sheet-grab' }),
+    el('h3', { text: parse(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) }),
+    actions,
+    checkInCard(dateStr),
+    el('button', { class: 'linkbtn', onclick: close }, ['Close']),
   ]);
+  attachSwipeDismiss(sheetEl);
+  return el('div', { class: 'sheet-bg', onclick: onCloseBg }, [sheetEl]);
 }
 
 // =================== STATS ===================
