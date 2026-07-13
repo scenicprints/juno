@@ -168,6 +168,18 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
 - **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### v0.7.2 — Sympto-thermal combine + bounded reads  ✅ BUILT
+- `effectiveWindow()` in `js/fertility.js` is the single source of truth for the fertile window,
+  used by classify (calendar shading), Today banner, in-app alerts, and the notifier. It starts from
+  the calendar window and makes it **safer** with whatever's logged: mucus first-appearance moves the
+  fertile START earlier; a confirmed temp shift and/or the mucus peak-rule push "safe again" LATER
+  (whichever confirms latest). **No temp + no mucus → exactly the calendar estimate (still works).**
+  Verified all 4 cases. Signs can only make it safer, never less safe (conservative for Avoid).
+- **Firestore read bound:** notifier now queries only the last 120 days of `days` (was the whole
+  collection every 15 min) → caps reads at ~12k/day and never grows. Free tier is 50k/day. No AI/token
+  cost anywhere (no LLM at runtime). GitHub Actions free on public repo. Told the user: **zero phone
+  battery/data cost** — the cron runs on GitHub's servers, phones only wake on an actual push.
+
 ### v0.7.1 — Mucus tracking + neutral wording  ✅ BUILT
 - **Cervical mucus** (compact): single-select chip row in the check-in (Dry/Sticky/Creamy/Egg-white/Watery
   → `days.mucus`). `mucusPeak()` in `js/nfp.js` = last peak-type (eggwhite/watery) day; peak rule →

@@ -9,7 +9,7 @@
 // for US timezones — fine for this app.
 import admin from 'firebase-admin';
 import { predict, activePeriod } from '../../js/predict.js';
-import { window as fertWindow, confirmedOvulation } from '../../js/fertility.js';
+import { effectiveWindow } from '../../js/fertility.js';
 import { moodForecast } from '../../js/mood.js';
 import { today, prettyDate, fmt, addDays, diffDays } from '../../js/dates.js';
 
@@ -22,6 +22,7 @@ if (!svc.project_id) { console.error('Missing/invalid FIREBASE_SERVICE_ACCOUNT s
 admin.initializeApp({ credential: admin.credential.cert(svc) });
 const db = admin.firestore();
 const TEST = process.env.TEST === 'true';
+const DAYS_CUTOFF = fmt(addDays(today(), -120)); // read only recent day-logs (bounds Firestore reads)
 
 function localNow(tz) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -37,20 +38,18 @@ function digestTriggers(cycles, days, settings) {
   const mode = settings.mode || 'avoid';
   const p = predict(cycles, settings);
   if (p.state === 'none') return [];
-  const fert = fertWindow(p, mode);
-  const tc = confirmedOvulation(cycles, days);
+  const eff = effectiveWindow(cycles, days, p, mode);
   const mf = moodForecast(cycles, days, p);
   const t = today();
   const out = [];
   if (!activePeriod(cycles) && p.daysUntil === 5) {
     out.push({ key: 'period', body: `Heads up — period expected in about 5 days (around ${prettyDate(p.nextStart)}).` });
   }
-  if (mode === 'avoid' && fert) {
-    if (diffDays(t, fert.fertileStart) === 0) {
-      out.push({ key: 'redlight', body: `Red light — no unprotected sex starting today. Fertile through ${prettyDate(fert.fertileEnd)}.` });
+  if (mode === 'avoid' && eff) {
+    if (diffDays(t, eff.fertileStart) === 0) {
+      out.push({ key: 'redlight', body: `Red light — no unprotected sex starting today. Fertile through ${prettyDate(eff.fertileEnd)}.` });
     }
-    const safeAgain = tc ? tc.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
-    if (t === safeAgain) {
+    if (t === eff.safeAgain) {
       out.push({ key: 'greenlight', body: `Green light — you can have sex again as of today (past the fertile window). Not 100% — it's awareness, not birth control.` });
     }
   }
@@ -84,7 +83,7 @@ async function main() {
     const uid = u.id;
     const [cycSnap, daySnap, setSnap, pushSnap] = await Promise.all([
       db.collection(`users/${uid}/cycles`).get(),
-      db.collection(`users/${uid}/days`).get(),
+      db.collection(`users/${uid}/days`).where(admin.firestore.FieldPath.documentId(), '>=', DAYS_CUTOFF).get(),
       db.doc(`users/${uid}/meta/settings`).get(),
       db.doc(`users/${uid}/meta/push`).get(),
     ]);

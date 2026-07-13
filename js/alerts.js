@@ -6,7 +6,7 @@ import { diffDays, today, prettyDate, fmt, addDays } from './dates.js';
 export function alerts(ctx) {
   const out = [];
   const t = today();
-  const { prediction: p, fert, mode, tempConfirm, moodF, activePeriod } = ctx;
+  const { prediction: p, eff, mode, tempConfirm, moodF, activePeriod } = ctx;
 
   // --- period timing ---
   if (p && p.state !== 'none' && !activePeriod) {
@@ -17,15 +17,14 @@ export function alerts(ctx) {
   }
 
   // --- fertility window ---
-  if (fert && mode === 'avoid') {
-    const safeAgain = tempConfirm ? tempConfirm.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
-    const toOpen = diffDays(t, fert.fertileStart);
-    if (!tempConfirm && toOpen === 1) out.push({ level: 'warn', text: `Red light tomorrow — fertile window opens (through ${prettyDate(fert.fertileEnd)}). No unprotected sex.` });
-    if (t === safeAgain) out.push({ level: 'info', text: `Green light — you can have sex again (past the fertile window). Still not birth control.` });
+  if (eff && mode === 'avoid') {
+    const toOpen = diffDays(t, eff.fertileStart);
+    if (toOpen === 1) out.push({ level: 'warn', text: `Red light tomorrow — fertile window opens (through ${prettyDate(eff.fertileEnd)}). No unprotected sex.` });
+    if (t === eff.safeAgain) out.push({ level: 'info', text: `Green light — you can have sex again (past the fertile window). Still not birth control.` });
   }
-  if (fert && mode === 'conceive') {
-    const toOpen = diffDays(t, fert.fertileStart);
-    if (toOpen === 1) out.push({ level: 'info', text: `Fertile window starts tomorrow — peak around ${prettyDate(fert.peakStart)}–${prettyDate(fert.peakEnd)}.` });
+  if (eff && mode === 'conceive') {
+    const toOpen = diffDays(t, eff.fertileStart);
+    if (toOpen === 1) out.push({ level: 'info', text: `Fertile window starts tomorrow — peak around ${prettyDate(eff.peakStart)}–${prettyDate(eff.peakEnd)}.` });
     else if (toOpen === 0) out.push({ level: 'info', text: 'Fertile window starts today.' });
   }
 

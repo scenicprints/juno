@@ -2,7 +2,7 @@
 // SAFETY: this is fertility AWARENESS, not contraception. In 'avoid' mode we shade
 // the fertile window CONSERVATIVELY (wide) and err toward "cannot" whenever unsure.
 import { fmt, addDays, diffDays } from './dates.js';
-import { analyze as nfpAnalyze } from './nfp.js';
+import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 
 // Given a prediction (from predict.js) and mode, return key fertility dates.
 // Ovulation ~14 days before the next period (luteal phase is the stable part).
@@ -26,10 +26,43 @@ export function window(prediction, mode = 'avoid') {
   };
 }
 
+// first day of any (non-dry) cervical mucus this cycle — where the fertile phase starts by the mucus sign
+function firstMucusDay(cycles, days) {
+  const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
+  if (!starts.length || !days) return null;
+  const cs = starts[starts.length - 1];
+  const ds = Object.keys(days).filter((x) => x >= cs && days[x].mucus && days[x].mucus !== 'dry').sort();
+  return ds.length ? ds[0] : null;
+}
+
+// Effective fertile window = calendar estimate, made SAFER by whatever signs are logged:
+//  - mucus first-appearance can move the fertile START earlier;
+//  - a confirmed temperature shift and/or the mucus peak-rule can push "safe again" LATER
+//    (whichever confirms latest — the conservative sympto-thermal double-check).
+// With NO temperature and NO mucus logged, it's exactly the calendar estimate — still works.
+export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
+  const base = window(prediction, mode);
+  if (!base) return null;
+  const tc = confirmedOvulation(cycles, days);
+  const mp = mucusPeak(cycles, days);
+  let fertileStart = base.fertileStart;
+  let safeAgain = fmt(addDays(base.fertileEnd, 1)); // calendar baseline
+  if (mode === 'avoid') {
+    const fm = firstMucusDay(cycles, days);
+    if (fm && fm < fertileStart) fertileStart = fm;
+    if (tc && tc.infertileFrom > safeAgain) safeAgain = tc.infertileFrom;
+    if (mp && mp.infertileFrom > safeAgain) safeAgain = mp.infertileFrom;
+  } else if (tc && tc.infertileFrom > safeAgain) {
+    safeAgain = tc.infertileFrom;
+  }
+  return { ...base, fertileStart, safeAgain, tempConfirmed: !!tc, mucusPeakDate: mp ? mp.peakDate : null };
+}
+
 // Classify a single date string for calendar shading + the Today banner.
 // Returns one of: 'period' | 'predictedPeriod' | 'cannot' | 'fertile' | 'peak' | 'can'
 export function classify(dateStr, ctx) {
-  const { cycles = [], prediction, fert, mode = 'avoid' } = ctx;
+  const { cycles = [], prediction, mode = 'avoid' } = ctx;
+  const eff = ctx.eff || ctx.fert; // effective window (calendar + temp + mucus)
 
   // actual logged period days
   for (const c of cycles) {
@@ -43,20 +76,16 @@ export function classify(dateStr, ctx) {
   if (prediction.rangeStart && dateStr >= prediction.rangeStart && dateStr <= prediction.rangeEnd) {
     return 'predictedPeriod';
   }
-  if (fert) {
-    const tc = ctx.tempConfirm; // temperature-confirmed ovulation for the current cycle (or null)
+  if (eff) {
     if (mode === 'avoid') {
-      if (tc) {
-        // temps confirm ovulation: fertile from window-open until confirmation, then safe
-        if (dateStr >= tc.infertileFrom) return 'can';
-        if (dateStr >= fert.fertileStart) return 'cannot';
-        return 'can';
-      }
-      if (dateStr >= fert.fertileStart && dateStr <= fert.fertileEnd) return 'cannot';
-    } else { // conceive / neutral
-      if (dateStr >= fert.peakStart && dateStr <= fert.peakEnd) return 'peak';
-      if (dateStr >= fert.fertileStart && dateStr <= fert.fertileEnd) return 'fertile';
+      // fertile ("cannot") from the (possibly-earlier) start until confirmed safe again
+      if (dateStr >= eff.safeAgain) return 'can';
+      if (dateStr >= eff.fertileStart) return 'cannot';
+      return 'can';
     }
+    // conceive / neutral
+    if (dateStr >= eff.peakStart && dateStr <= eff.peakEnd) return 'peak';
+    if (dateStr >= eff.fertileStart && dateStr <= eff.fertileEnd) return 'fertile';
   }
   return 'can';
 }
