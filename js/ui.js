@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.4';
+export const APP_VERSION = '0.7.5';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -54,6 +54,21 @@ let _root, _data, _handlers;
 let view = { tab: 'today', calMonth: null, sheetDate: null, tempEditing: false };
 function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
 function setNotifPref(key, val) { _handlers.setSettings({ notifPrefs: { [key]: val }, tz: tzName() }); }
+
+// --- Android back-button handling: overlays (day sheet, notifications sub-screen) push a
+// history entry so the hardware/gesture Back closes the overlay instead of exiting the app. ---
+let _historyBound = false;
+function bindBack() {
+  if (_historyBound) return;
+  _historyBound = true;
+  window.addEventListener('popstate', () => {
+    if (view.sheetDate) { view.sheetDate = null; if (_root) rerender(); }
+    else if (view.tab === 'notifications') { view.tab = 'settings'; if (_root) rerender(); }
+  });
+}
+function pushBackTrap() { try { history.pushState({ juno: 1 }, ''); } catch (_) {} }
+function overlayBack() { try { history.back(); } catch (_) { view.sheetDate = null; if (_root) rerender(); } }
+function openSheet(ds) { view.sheetDate = ds; pushBackTrap(); rerender(); }
 
 function mode() { return _data?.settings?.mode || 'avoid'; }
 function ctx() {
@@ -112,6 +127,7 @@ function friendlyAuthErr(e) {
 export function mountApp(root, data, handlers) {
   _root = root; _data = data; _handlers = handlers;
   if (!view.calMonth) { const t = parse(today()); view.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
+  bindBack();
   rerender();
 }
 export function updateData(data) { _data = data; if (_root) rerender(); }
@@ -264,7 +280,7 @@ function viewToday() {
     ? el('button', { class: 'btn', onclick: () => _handlers.endPeriod(active.id, today()) }, ['Period ended today'])
     : el('button', { class: 'btn primary', onclick: () => _handlers.startPeriod(today()) }, ['Period started today']);
   const picker = el('input', { class: 'daypick', type: 'date', value: today(), max: today() });
-  picker.addEventListener('change', () => { if (picker.value) { view.sheetDate = picker.value; rerender(); } });
+  picker.addEventListener('change', () => { if (picker.value) openSheet(picker.value); });
   const pickRow = el('label', { class: 'daypick-row' }, [
     el('span', { class: 'muted small', text: 'Log another day' }),
     picker,
@@ -495,7 +511,7 @@ function viewCalendar() {
     const cls = classify(ds, c);
     const cell = el('button', {
       class: `cal-cell k-${cls}` + (ds === today() ? ' istoday' : ''),
-      onclick: () => { view.sheetDate = ds; rerender(); },
+      onclick: () => openSheet(ds),
     }, [String(d)]);
     if (hasLog(_data.days[ds])) cell.appendChild(el('span', { class: 'dot' }));
     grid.appendChild(cell);
@@ -516,8 +532,8 @@ function legend() {
 // =================== DAY SHEET ===================
 function daySheet(dateStr) {
   const active = activePeriod(_data.cycles);
-  const onCloseBg = (e) => { if (e.target.classList.contains('sheet-bg')) { view.sheetDate = null; rerender(); } };
-  const close = () => { view.sheetDate = null; rerender(); };
+  const onCloseBg = (e) => { if (e.target.classList.contains('sheet-bg')) overlayBack(); };
+  const close = () => overlayBack();
 
   const actions = el('div', { class: 'sheet-actions' });
   actions.appendChild(el('button', { class: 'btn primary', onclick: () => { _handlers.startPeriod(dateStr); close(); } }, ['Mark period start']));
@@ -583,7 +599,7 @@ function viewNotifications() {
   const prefs = s.notifPrefs || {};
   const wrap = el('div', {});
   wrap.appendChild(el('div', { class: 'subhead' }, [
-    el('button', { class: 'linkbtn back', onclick: () => { view.tab = 'settings'; rerender(); } }, ['‹ Settings']),
+    el('button', { class: 'linkbtn back', onclick: () => overlayBack() }, ['‹ Settings']),
     el('h2', { class: 'view-title', text: 'Notifications' }),
   ]));
 
@@ -677,7 +693,7 @@ function viewSettings() {
 
   // notifications → its own screen
   wrap.appendChild(el('div', { class: 'card' }, [
-    el('button', { class: 'btn row-btn', onclick: () => { view.tab = 'notifications'; rerender(); } }, ['Notifications  ›']),
+    el('button', { class: 'btn row-btn', onclick: () => { view.tab = 'notifications'; pushBackTrap(); rerender(); } }, ['Notifications  ›']),
   ]));
 
   wrap.appendChild(el('div', { class: 'card' }, [
