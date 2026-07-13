@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.7';
+export const APP_VERSION = '0.7.8';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -54,6 +54,23 @@ let _root, _data, _handlers;
 let view = { tab: 'today', calMonth: null, sheetDate: null, tempEditing: false };
 function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
 function setNotifPref(key, val) { _handlers.setSettings({ notifPrefs: { [key]: val }, tz: tzName() }); }
+
+// download all of the account's data as a JSON backup file
+function downloadData() {
+  try {
+    const payload = {
+      app: 'Juno', version: APP_VERSION, exportedAt: new Date().toISOString(),
+      cycles: _data.cycles || [], days: _data.days || {}, settings: _data.settings || {},
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `juno-export-${today()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Downloaded your Juno data.');
+  } catch (e) { toast('Could not export: ' + (e?.message || e)); }
+}
 
 // --- Android back-button handling: overlays (day sheet, notifications sub-screen) push a
 // history entry so the hardware/gesture Back closes the overlay instead of exiting the app. ---
@@ -722,6 +739,12 @@ function viewSettings() {
   // notifications → its own screen
   wrap.appendChild(el('div', { class: 'card' }, [
     el('button', { class: 'btn row-btn', onclick: () => { view.tab = 'notifications'; pushBackTrap(); rerender(); } }, ['Notifications  ›']),
+  ]));
+
+  wrap.appendChild(el('div', { class: 'card' }, [
+    el('h3', { class: 'card-h', text: 'Your data' }),
+    el('p', { class: 'muted small', text: 'Download everything (periods, temperatures, mucus, moods, settings) as a backup file.' }),
+    el('button', { class: 'btn', onclick: () => downloadData() }, ['Download my data']),
   ]));
 
   wrap.appendChild(el('div', { class: 'card' }, [

@@ -168,6 +168,18 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
 - **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### v0.7.5–0.7.8 — PWA polish + data export  ✅ BUILT
+- v0.7.5: Android **Back** closes the day sheet / notifications sub-screen (history trap) instead of
+  exiting; **pull-to-refresh disabled** (overscroll-behavior).
+- v0.7.6–0.7.7: swipe-down-to-dismiss on the sheet via a `touch-action:none` drag header. **NOTE: the
+  swipe still doesn't work on the user's device** — user is fine leaving it (Back/Close/tap-dim all work).
+  If revisited, try Pointer Events. Back-button + no-refresh DO work.
+- v0.7.8: **Settings → Your data → "Download my data"** exports everything (cycles/days/settings) as a
+  JSON backup file `juno-export-<date>.json`. `downloadData()` in ui.js.
+- Product decision: user considers the app **feature-complete**. Declined intercourse logging,
+  late-period panel, sharper mood forecast, privacy lock, and a mood-in-temp-chart strip. Keep mood
+  input minimal (single 1–5 face). Don't re-pitch these unless asked.
+
 ### v0.7.2 — Sympto-thermal combine + bounded reads  ✅ BUILT
 - `effectiveWindow()` in `js/fertility.js` is the single source of truth for the fertile window,
   used by classify (calendar shading), Today banner, in-app alerts, and the notifier. It starts from
