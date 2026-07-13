@@ -4,10 +4,11 @@ import { window as fertWindow, classify, todayStatus, confirmedOvulation } from 
 import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
 import { cycleStats } from './stats.js';
+import { analyze as nfpAnalyze } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.6.2';
+export const APP_VERSION = '0.7.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -37,13 +38,16 @@ function toast(msg) {
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
+  t.addEventListener('click', () => t.remove());
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3600);
+  setTimeout(() => t.remove(), Math.min(10000, 3500 + msg.length * 45)); // longer for long messages; tap to dismiss
 }
 
 // ---------- module render state ----------
 let _root, _data, _handlers;
-let view = { tab: 'today', calMonth: null, sheetDate: null };
+let view = { tab: 'today', calMonth: null, sheetDate: null, tempEditing: false };
+function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
+function setNotifPref(key, val) { _handlers.setSettings({ notifPrefs: { [key]: val }, tz: tzName() }); }
 
 function mode() { return _data?.settings?.mode || 'avoid'; }
 function ctx() {
@@ -111,7 +115,8 @@ function rerender() {
   shell.appendChild(el('main', { class: 'content' }, [
     view.tab === 'today' ? viewToday() :
     view.tab === 'calendar' ? viewCalendar() :
-    view.tab === 'stats' ? viewStats() : viewSettings(),
+    view.tab === 'stats' ? viewStats() :
+    view.tab === 'notifications' ? viewNotifications() : viewSettings(),
   ]));
   shell.appendChild(nav());
   _root.appendChild(shell);
@@ -120,7 +125,7 @@ function rerender() {
 
 function nav() {
   const item = (id, label, icon) => el('button',
-    { class: 'nav-item' + (view.tab === id ? ' active' : ''), onclick: () => { view.tab = id; rerender(); } },
+    { class: 'nav-item' + ((view.tab === id || (id === 'settings' && view.tab === 'notifications')) ? ' active' : ''), onclick: () => { view.tab = id; rerender(); } },
     [el('span', { class: 'nav-icon', text: icon }), el('span', { text: label })]);
   return el('nav', { class: 'bottomnav' }, [
     item('today', 'Today', '●'),
@@ -243,6 +248,9 @@ function viewToday() {
   // daily check-in — prominent (mood + preset symptom chips)
   wrap.appendChild(checkInCard(today()));
 
+  // temperature (own box) + NFP chart
+  wrap.appendChild(temperatureCard(today()));
+
   // period action
   const active = activePeriod(_data.cycles);
   const periodBtn = active
@@ -300,15 +308,17 @@ function checkInCard(dateStr) {
   });
   card.appendChild(chips);
 
-  // optional morning temperature (BBT) — confirms ovulation once a sustained rise appears
-  card.appendChild(el('div', { class: 'field-label', text: 'Morning temperature (optional)' }));
-  const tempIn = el('input', { class: 'temp-in', type: 'number', step: '0.05', inputmode: 'decimal',
-    placeholder: '°F  (take it right after waking)', value: day.tempF != null ? String(day.tempF) : '' });
-  tempIn.addEventListener('change', () => {
-    const v = parseFloat(tempIn.value);
-    _handlers.setDay(dateStr, { tempF: Number.isFinite(v) ? Math.round(v * 100) / 100 : null });
-  });
-  card.appendChild(tempIn);
+  // temperature: for TODAY it lives in its own Temperature card; here (backfilling a past day) keep an inline field
+  if (dateStr !== today()) {
+    card.appendChild(el('div', { class: 'field-label', text: 'Morning temperature (optional)' }));
+    const tempIn = el('input', { class: 'temp-in', type: 'number', step: '0.05', inputmode: 'decimal',
+      placeholder: '°F  (right after waking)', value: day.tempF != null ? String(day.tempF) : '' });
+    tempIn.addEventListener('change', () => {
+      const v = parseFloat(tempIn.value);
+      _handlers.setDay(dateStr, { tempF: Number.isFinite(v) ? Math.round(v * 100) / 100 : null });
+    });
+    card.appendChild(tempIn);
+  }
 
   // optional free-text note (secondary)
   const note = el('input', { type: 'text', placeholder: 'Add a note (optional)', value: day.note || '' });
@@ -334,6 +344,101 @@ function moodOutlookCard(c) {
     ? 'Early read from ~1 cycle — it sharpens as she logs more. A pattern, not a certainty.'
     : `From ${f.sampleCycles} cycles of her logs. A pattern, not a certainty.` }));
   return card;
+}
+
+// temperature card (own box) — enter temp → Submit → morphs into the NFP chart
+function temperatureCard(dateStr) {
+  const day = _data.days[dateStr] || {};
+  const has = typeof day.tempF === 'number';
+  const a = nfpAnalyze(_data.cycles, _data.days);
+  const card = el('div', { class: 'card temp-card' }, [el('h3', { class: 'card-h', text: 'Temperature' })]);
+
+  if (!has || view.tempEditing) {
+    const input = el('input', { class: 'temp-in', type: 'number', step: '0.05', inputmode: 'decimal',
+      placeholder: '°F  (right after waking)', value: has ? String(day.tempF) : '' });
+    const submit = el('button', { class: 'btn primary', onclick: () => {
+      const v = parseFloat(input.value);
+      if (!Number.isFinite(v) || v < 90 || v > 105) { toast('Enter a temperature like 97.80'); return; }
+      _handlers.setDay(dateStr, { tempF: Math.round(v * 100) / 100 });
+      view.tempEditing = false;
+      rerender();
+    } }, ['Submit']);
+    card.appendChild(el('div', { class: 'temp-entry' }, [input, submit]));
+  } else {
+    card.appendChild(el('div', { class: 'temp-today' }, [
+      el('span', { text: `Today: ${day.tempF.toFixed(2)}°F` }),
+      el('button', { class: 'linkbtn inline-edit', onclick: () => { view.tempEditing = true; rerender(); } }, ['edit']),
+    ]));
+  }
+
+  if (a.series.length >= 3) {
+    card.appendChild(temperatureChart(a));
+    card.appendChild(nfpSummary(a));
+  } else if (a.series.length >= 1) {
+    card.appendChild(el('p', { class: 'muted small', text: `${a.series.length} temp${a.series.length > 1 ? 's' : ''} logged this cycle — a few more and the thermal-shift chart appears.` }));
+  } else {
+    card.appendChild(el('p', { class: 'muted small', text: 'Log her waking temperature each morning to build the chart and confirm ovulation.' }));
+  }
+  return card;
+}
+
+function nfpSummary(a) {
+  const box = el('div', { class: 'nfp-summary' });
+  if (a.hasShift && a.infertileFrom) {
+    box.appendChild(el('p', { class: 'confirm-note', text: `✓ Thermal shift confirmed. Est. ovulation ${prettyDate(a.ovulationEst)}; post-ovulation (infertile) phase since ${prettyDate(a.infertileFrom)}.` }));
+  } else if (a.hasShift && a.tentative) {
+    box.appendChild(el('p', { class: 'learning', text: `A temperature rise has begun (est. ovulation ~${prettyDate(a.ovulationEst)}) — waiting for one more high reading to confirm.` }));
+  } else {
+    box.appendChild(el('p', { class: 'muted small', text: 'No thermal shift detected yet this cycle.' }));
+  }
+  return box;
+}
+
+// SVG BBT chart with coverline (LTL), thermal-shift points, est. ovulation, infertile-phase shading
+function temperatureChart(a) {
+  const s = a.series, n = s.length;
+  const W = 320, H = 176, padL = 6, padR = 6, padT = 16, padB = 18;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const temps = s.map((p) => p.t).concat(a.coverline != null ? [a.coverline] : []);
+  let tmin = Math.min(...temps), tmax = Math.max(...temps);
+  if (tmax - tmin < 0.6) { const mid = (tmax + tmin) / 2; tmin = mid - 0.4; tmax = mid + 0.4; }
+  tmin -= 0.15; tmax += 0.15;
+  const x = (i) => n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
+  const y = (t) => padT + (tmax - t) / (tmax - tmin) * plotH;
+
+  const infertileIdx = a.infertileFrom ? s.findIndex((p) => p.date === a.infertileFrom) : -1;
+  const ovIdx = a.ovulationEst ? s.findIndex((p) => p.date === a.ovulationEst) : -1;
+  const shiftSet = new Set(a.shiftDays);
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Temperature chart">`;
+  if (infertileIdx >= 0) {
+    const x0 = x(infertileIdx);
+    svg += `<rect x="${x0.toFixed(1)}" y="${padT}" width="${(W - padR - x0).toFixed(1)}" height="${plotH}" fill="rgba(79,191,159,0.13)"/>`;
+  }
+  if (a.coverline != null) {
+    const cy = y(a.coverline);
+    svg += `<line x1="${padL}" y1="${cy.toFixed(1)}" x2="${W - padR}" y2="${cy.toFixed(1)}" stroke="#c9a7ff" stroke-width="1.4" stroke-dasharray="4 3"/>`;
+    svg += `<text x="${W - padR}" y="${(cy - 4).toFixed(1)}" text-anchor="end" fill="#c9a7ff" font-size="10">LTL ${a.coverline.toFixed(2)}</text>`;
+  }
+  if (ovIdx >= 0) {
+    const ox = x(ovIdx);
+    svg += `<line x1="${ox.toFixed(1)}" y1="${padT}" x2="${ox.toFixed(1)}" y2="${padT + plotH}" stroke="#f4b8d0" stroke-width="1" stroke-dasharray="2 2"/>`;
+    svg += `<text x="${ox.toFixed(1)}" y="${(padT - 4).toFixed(1)}" text-anchor="middle" fill="#f4b8d0" font-size="9">ovul?</text>`;
+  }
+  const line = s.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.t).toFixed(1)}`).join(' ');
+  svg += `<path d="${line}" fill="none" stroke="#7c6fa8" stroke-width="1.5"/>`;
+  s.forEach((p, i) => {
+    let fill = '#a99fc4';
+    if (shiftSet.has(p.date)) fill = '#c9a7ff';
+    if (infertileIdx >= 0 && i >= infertileIdx) fill = '#4fbf9f';
+    svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.t).toFixed(1)}" r="3.2" fill="${fill}"/>`;
+  });
+  const labels = n <= 1 ? [0] : [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
+  labels.forEach((i) => {
+    svg += `<text x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle" fill="#a99fc4" font-size="9">d${s[i].cycleDay}</text>`;
+  });
+  svg += `</svg>`;
+  return el('div', { class: 'temp-chart', html: svg });
 }
 
 // =================== CALENDAR ===================
@@ -441,6 +546,70 @@ function viewStats() {
   return wrap;
 }
 
+// =================== NOTIFICATIONS ===================
+function viewNotifications() {
+  const s = _data.settings || {};
+  const prefs = s.notifPrefs || {};
+  const wrap = el('div', {});
+  wrap.appendChild(el('div', { class: 'subhead' }, [
+    el('button', { class: 'linkbtn back', onclick: () => { view.tab = 'settings'; rerender(); } }, ['‹ Settings']),
+    el('h2', { class: 'view-title', text: 'Notifications' }),
+  ]));
+
+  // this device (permission + enable)
+  const perm = permissionState();
+  const enableCard = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'This device' })]);
+  if (!pushConfigured()) {
+    enableCard.appendChild(el('p', { class: 'muted small', text: 'Push isn’t configured for this app yet.' }));
+  } else if (perm === 'granted') {
+    enableCard.appendChild(el('p', { class: 'confirm-note', text: '✓ Notifications are on for this phone.' }));
+    enableCard.appendChild(el('button', { class: 'btn', onclick: async () => {
+      try { await enableNotifications(); toast('Refreshed on this phone.'); } catch (e) { toast(e?.message || 'Error'); }
+    } }, ['Refresh this phone']));
+  } else {
+    enableCard.appendChild(el('p', { class: 'muted small', text: 'Turn notifications on for this phone (do it on each of your phones). iPhone: install to the Home Screen first.' }));
+    enableCard.appendChild(el('button', { class: 'btn primary', onclick: async () => {
+      try { await enableNotifications(); _handlers.setSettings({ tz: tzName() }); toast('Enabled on this phone.'); rerender(); }
+      catch (e) { toast(e?.message || 'Could not enable notifications.'); }
+    } }, ['Turn on notifications']));
+  }
+  wrap.appendChild(enableCard);
+
+  // which notifications (digest toggles; default on)
+  const toggle = (key, label) => el('div', { class: 'toggle-row' }, [
+    el('div', { text: label }),
+    el('button', { class: 'switch' + (prefs[key] !== false ? ' on' : ''), onclick: () => setNotifPref(key, prefs[key] === false) }, [el('span', { class: 'knob' })]),
+  ]);
+  wrap.appendChild(el('div', { class: 'card' }, [
+    el('h3', { class: 'card-h', text: 'Which notifications' }),
+    toggle('period', 'Period in ~5 days'),
+    toggle('redlight', 'Red light — fertile window opens'),
+    toggle('greenlight', 'Green light — safe again'),
+    toggle('mooddip', 'Incoming mood dip'),
+  ]));
+
+  // daily temperature reminder (off by default; has a time)
+  const tempOn = prefs.temp === true;
+  const tr = s.tempReminder || {};
+  const trCard = el('div', { class: 'card' }, [
+    el('h3', { class: 'card-h', text: 'Temperature reminder' }),
+    el('div', { class: 'toggle-row' }, [
+      el('div', {}, [el('div', { text: 'Remind her to take her temperature' }), el('div', { class: 'muted small', text: 'Every morning at the time you pick.' })]),
+      el('button', { class: 'switch' + (tempOn ? ' on' : ''), onclick: () => setNotifPref('temp', !tempOn) }, [el('span', { class: 'knob' })]),
+    ]),
+  ]);
+  if (tempOn) {
+    const timeIn = el('input', { class: 'time-in', type: 'time', value: tr.time || '06:30' });
+    timeIn.addEventListener('change', () => { if (timeIn.value) _handlers.setSettings({ tempReminder: { time: timeIn.value }, tz: tzName() }); });
+    trCard.appendChild(el('div', { class: 'inline' }, [el('span', { class: 'muted small', text: 'Remind at' }), timeIn]));
+    trCard.appendChild(el('p', { class: 'muted small', text: 'Fires within ~15 min of this time. Needs notifications on for this phone.' }));
+  }
+  wrap.appendChild(trCard);
+
+  wrap.appendChild(el('p', { class: 'disclaimer', text: 'Notifications come from a daily cloud check of her logged data.' }));
+  return wrap;
+}
+
 // =================== SETTINGS ===================
 function viewSettings() {
   const wrap = el('div', {});
@@ -475,24 +644,10 @@ function viewSettings() {
     el('div', { class: 'inline' }, [lenIn, el('span', { class: 'muted', text: 'days' })]),
   ]));
 
-  // notifications
-  const nCard = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Notifications' })]);
-  if (!pushConfigured()) {
-    nCard.appendChild(el('p', { class: 'muted small', text: 'Push notifications aren’t switched on for this app yet — the web-push key still needs to be added.' }));
-  } else {
-    const perm = permissionState();
-    nCard.appendChild(el('p', { class: 'muted small', text: 'Get a heads-up for: her period in ~5 days, the not-safe window opening and ending, and an incoming mood dip.' }));
-    if (perm === 'granted') nCard.appendChild(el('p', { class: 'confirm-note', text: '✓ Notifications are on for this device.' }));
-    nCard.appendChild(el('button', {
-      class: 'btn primary',
-      onclick: async () => {
-        try { await enableNotifications(); toast('Notifications enabled on this device.'); rerender(); }
-        catch (e) { toast(e?.message || 'Could not enable notifications.'); }
-      },
-    }, [perm === 'granted' ? 'Refresh this device' : 'Turn on notifications']));
-    nCard.appendChild(el('p', { class: 'muted small', text: 'On iPhone: add Juno to the Home Screen first, then turn this on from the installed app. Enable it on each phone.' }));
-  }
-  wrap.appendChild(nCard);
+  // notifications → its own screen
+  wrap.appendChild(el('div', { class: 'card' }, [
+    el('button', { class: 'btn row-btn', onclick: () => { view.tab = 'notifications'; rerender(); } }, ['Notifications  ›']),
+  ]));
 
   wrap.appendChild(el('div', { class: 'card' }, [
     el('button', { class: 'btn', onclick: () => _handlers.logout() }, ['Sign out']),

@@ -2,6 +2,7 @@
 // SAFETY: this is fertility AWARENESS, not contraception. In 'avoid' mode we shade
 // the fertile window CONSERVATIVELY (wide) and err toward "cannot" whenever unsure.
 import { fmt, addDays, diffDays } from './dates.js';
+import { analyze as nfpAnalyze } from './nfp.js';
 
 // Given a prediction (from predict.js) and mode, return key fertility dates.
 // Ovulation ~14 days before the next period (luteal phase is the stable part).
@@ -60,27 +61,13 @@ export function classify(dateStr, ctx) {
   return 'can';
 }
 
-// Temperature-confirmed ovulation for the CURRENT cycle (after the last period start).
-// Basal body temperature rises ~0.3°F+ after ovulation and stays up. Rule: 3 consecutive
-// logged temps at least 0.3°F above the average of the previous 6 logged temps → ovulation
-// has passed; the infertile luteal phase begins on that 3rd high temp.
-// NOTE (v0.2 simplification): uses consecutive *logged* temps, tolerant of a missed day here
-// or there rather than requiring calendar-consecutive days. Refine later if needed.
+// Temperature-confirmed ovulation for the CURRENT cycle — delegates to the shared NFP
+// coverline/thermal-shift analysis (js/nfp.js) so the "green light" and the chart agree.
+// Returns { ovulation, shiftStart, infertileFrom } only once the shift is CONFIRMED (not tentative).
 export function confirmedOvulation(cycles, days) {
-  const starts = (cycles || []).map(c => c.startDate).filter(Boolean).sort();
-  if (!starts.length || !days) return null;
-  const cycleStart = starts[starts.length - 1];
-  const series = Object.keys(days)
-    .filter(d => d >= cycleStart && typeof days[d].tempF === 'number' && days[d].tempF > 90)
-    .sort()
-    .map(d => ({ date: d, t: days[d].tempF }));
-  if (series.length < 9) return null; // need 6 baseline + 3 elevated
-  const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-  for (let i = 6; i + 2 < series.length; i++) {
-    const base = avg(series.slice(i - 6, i).map(e => e.t)) + 0.3;
-    if (series[i].t >= base && series[i + 1].t >= base && series[i + 2].t >= base) {
-      return { ovulation: series[i - 1].date, shiftStart: series[i].date, infertileFrom: series[i + 2].date };
-    }
+  const a = nfpAnalyze(cycles, days);
+  if (a.hasShift && a.infertileFrom) {
+    return { ovulation: a.ovulationEst, shiftStart: a.shiftDays[0], infertileFrom: a.infertileFrom };
   }
   return null;
 }

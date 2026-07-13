@@ -176,6 +176,28 @@ input:focus { outline: none; border-color: var(--accent); }
   background: #3a2f52; color: var(--text); padding: 12px 18px; border-radius: 12px;
   border: 1px solid var(--line); z-index: 40; max-width: 88%; font-size: 14px;
 }
+/* temperature card + chart */
+.temp-entry { display: flex; gap: 8px; align-items: center; }
+.temp-entry .temp-in { flex: 1; margin: 0; }
+.temp-entry .btn { width: auto; margin: 0; padding: 12px 18px; }
+.temp-today { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 600; }
+.inline-edit { width: auto; padding: 6px 8px; }
+.temp-chart { margin: 12px 0 4px; background: #1b1430; border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
+.nfp-summary { margin-top: 4px; }
+.nfp-summary .confirm-note, .nfp-summary .learning { margin: 6px 0 0; }
+
+/* toggle switch + rows */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.toggle-row:first-of-type { border-top: none; }
+.switch { width: 46px; height: 28px; border-radius: 999px; background: #2c2342; border: 1px solid var(--line); position: relative; flex: none; padding: 0; }
+.switch .knob { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+.switch.on { background: var(--accent); border-color: transparent; }
+.switch.on .knob { left: 20px; background: #1a1226; }
+.time-in { width: auto; }
+.row-btn { text-align: left; }
+.subhead { display: flex; align-items: baseline; gap: 12px; }
+.subhead .back { width: auto; padding: 0; }
+
 .confirm-note {
   color: #c7f3e5; font-size: 13px; margin: -4px 0 14px;
   padding: 10px 14px; background: rgba(79,191,159,0.12);

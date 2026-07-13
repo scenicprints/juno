@@ -50,6 +50,12 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.7.0 — adds a Notifications-preferences screen, a daily temperature reminder, and an NFP
+temperature chart (coverline/shift/ovulation/infertile phase) on its own Today card.** Also v0.6.3
+fixed the "no active Service Worker" enable bug + actionable permission errors. Notifier now runs every
+15 min (per-type toggles, timezone-aware temp reminder, once-daily de-duped digest). Below is the prior
+status line (still accurate for the core):
+
 **v0.6.1 — everything built, incl. real push notifications (setup complete, verified).** All three
 pillars + in-app reminders + Stats tab + phase ring + **FCM push (scheduled GitHub Action)**. VAPID key
 in, `FIREBASE_SERVICE_ACCOUNT` secret set, notifier run verified green. **Only remaining:** enable
@@ -162,6 +168,21 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
 - **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### v0.7 — Notification prefs + NFP temperature chart  ✅ BUILT
+- **Notifications screen** (Settings → Notifications → `viewNotifications()`): per-type on/off toggles
+  (period / redlight / greenlight / mooddip) stored in `settings.notifPrefs`; device enable lives here now.
+- **Daily temperature reminder** (new): opt-in toggle + time picker (`settings.tempReminder.time`), sent at
+  the user's local time. Needs `settings.tz` (captured from the phone). Notifier now runs **every 15 min**
+  (`notify.yml` cron `*/15`); digest is gated to local morning + de-duped via `meta/push.sent`; temp
+  reminder fires within ~15 min of the set time. Timezone via `Intl` in `scripts/notify/index.js`.
+- **Temperature moved to its own card** on Today (between check-in and Period). Enter temp → **Submit** →
+  card shows the **NFP chart** (`temperatureChart()` in ui.js) built from `js/nfp.js` `analyze()`:
+  coverline (LTL = highest of the 6 lows before the rise), 3-day thermal shift (Sensiplan; 3rd must clear
+  LTL by ~0.36°F/0.2°C else a 4th confirms), est. ovulation (last low before rise), shaded post-ovulation
+  infertile phase. `confirmedOvulation()` now delegates to `nfp.analyze()` so chart + green-light agree.
+  Unit is **°F** (user choice). Past-day temp backfill stays inline in the check-in sheet.
+  - **NOT built (offered):** real mucus-based "peak day" (needs a mucus-tracking feature).
+
 ### v0.6 — Push notifications  ✅ BUILT · needs 2 setup inputs to go live
 Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action + FCM.
 - **Client:** `js/push.js` (`enableNotifications()` → permission → `getToken` with VAPID → `saveToken`),

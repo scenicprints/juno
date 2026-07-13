@@ -4,8 +4,10 @@ name: Juno notifications
 # Requires the FIREBASE_SERVICE_ACCOUNT secret (a Firebase service-account JSON).
 on:
   schedule:
-    # 13:00 UTC daily (~8–9am US Eastern). GitHub cron is UTC and may run a few minutes late.
-    - cron: '0 13 * * *'
+    # every 15 min: the daily digest fires once (gated to the user's local morning + de-duped),
+    # and the temperature reminder fires within ~15 min of the user's chosen local time.
+    # (Public repo → Actions minutes are free. GitHub cron is UTC and can run a few minutes late.)
+    - cron: '*/15 * * * *'
   workflow_dispatch:      # allows manual "Run workflow" for testing
     inputs:
       test:
