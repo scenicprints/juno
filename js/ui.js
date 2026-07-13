@@ -8,16 +8,18 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.2';
+export const APP_VERSION = '0.7.3';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
   'Cramps', 'Headache', 'Bloating', 'Tender breasts', 'Fatigue', 'Nausea',
   'Backache', 'Acne', 'Cravings', 'Irritable', 'Anxious', 'Insomnia',
 ];
+// Ordered by increasing fertility. Peak-type (most fertile) = egg-white + wet/slippery.
+// Keys are stable (don't rename) so already-logged data stays valid; labels use NFP wording.
 const MUCUS = [
   { key: 'dry', label: 'Dry' }, { key: 'sticky', label: 'Sticky' }, { key: 'creamy', label: 'Creamy' },
-  { key: 'eggwhite', label: 'Egg-white' }, { key: 'watery', label: 'Watery' },
+  { key: 'eggwhite', label: 'Egg-white' }, { key: 'watery', label: 'Wet/slippery' },
 ];
 function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus)); }
 
