@@ -9,9 +9,10 @@
 //  - Post-ovulatory infertile phase begins on that confirming (3rd or 4th) high temp.
 //  - Estimated ovulation ≈ the last low day before the rise (temperature can't pinpoint it;
 //    the true NFP "peak day" is a cervical-mucus sign, not temperature).
-import { diffDays } from './dates.js';
+import { diffDays, fmt, addDays } from './dates.js';
 
 const SHIFT_MIN_F = 0.36; // °F ≈ 0.2°C
+const PEAK_TYPES = new Set(['eggwhite', 'watery']); // most-fertile ("peak-type") cervical mucus
 
 export function currentCycleTemps(cycles, days) {
   const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
@@ -22,6 +23,20 @@ export function currentCycleTemps(cycles, days) {
     .sort()
     .map((d) => ({ date: d, t: days[d].tempF, cycleDay: diffDays(cycleStart, d) + 1 }));
   return { cycleStart, series };
+}
+
+// Cervical-mucus "Peak Day" for the current cycle = the LAST day of peak-type mucus.
+// By the NFP peak rule, the infertile phase begins the evening of the 3rd day after Peak,
+// so we report the 4th day as the first fully-infertile day (conservative).
+export function mucusPeak(cycles, days) {
+  const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
+  if (!starts.length || !days) return null;
+  const cycleStart = starts[starts.length - 1];
+  let peak = null;
+  Object.keys(days).filter((d) => d >= cycleStart && days[d].mucus).sort()
+    .forEach((d) => { if (PEAK_TYPES.has(days[d].mucus)) peak = d; });
+  if (!peak) return null;
+  return { peakDate: peak, infertileFrom: fmt(addDays(peak, 4)) };
 }
 
 export function analyze(cycles, days) {

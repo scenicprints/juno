@@ -4,18 +4,22 @@ import { window as fertWindow, classify, todayStatus, confirmedOvulation } from 
 import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
 import { cycleStats } from './stats.js';
-import { analyze as nfpAnalyze } from './nfp.js';
+import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.7.1';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
   'Cramps', 'Headache', 'Bloating', 'Tender breasts', 'Fatigue', 'Nausea',
   'Backache', 'Acne', 'Cravings', 'Irritable', 'Anxious', 'Insomnia',
 ];
-function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note)); }
+const MUCUS = [
+  { key: 'dry', label: 'Dry' }, { key: 'sticky', label: 'Sticky' }, { key: 'creamy', label: 'Creamy' },
+  { key: 'eggwhite', label: 'Egg-white' }, { key: 'watery', label: 'Watery' },
+];
+function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus)); }
 
 // tiny DOM helper
 function el(tag, props = {}, kids = []) {
@@ -209,7 +213,7 @@ function viewToday() {
 
   if (p.state === 'none') {
     wrap.appendChild(el('div', { class: 'card' }, [
-      el('p', { text: 'Welcome. Log the first day of her most recent period to start predictions.' }),
+      el('p', { text: 'Welcome. Log the first day of the most recent period to start predictions.' }),
     ]));
   } else {
     // prediction summary
@@ -221,7 +225,7 @@ function viewToday() {
     summary.appendChild(el('p', { class: 'muted', text: untilTxt }));
     summary.appendChild(el('p', { class: 'range', text: `Likely window: ${prettyDate(p.rangeStart)} – ${prettyDate(p.rangeEnd)}` }));
     if (p.state === 'learning')
-      summary.appendChild(el('p', { class: 'learning', text: 'Still learning her cycle — predictions get sharper after a couple of periods. Don’t rely on this yet.' }));
+      summary.appendChild(el('p', { class: 'learning', text: 'Still learning this cycle — predictions get sharper after a couple of periods. Don’t rely on this yet.' }));
     wrap.appendChild(summary);
 
     // can / cannot banner
@@ -276,7 +280,7 @@ function checkInCard(dateStr) {
   const day = _data.days[dateStr] || {};
   const isToday = dateStr === today();
   const card = el('div', { class: 'card checkin' }, [
-    el('h3', { class: 'card-h', text: isToday ? 'How is she feeling today?' : 'Check-in · ' + prettyDate(dateStr) }),
+    el('h3', { class: 'card-h', text: isToday ? 'Daily check-in' : 'Check-in · ' + prettyDate(dateStr) }),
   ]);
 
   // mood faces
@@ -308,6 +312,16 @@ function checkInCard(dateStr) {
   });
   card.appendChild(chips);
 
+  // cervical mucus (single-select, compact) — for the NFP peak-day sign
+  card.appendChild(el('div', { class: 'field-label', text: 'Cervical mucus' }));
+  const mrow = el('div', { class: 'chips' });
+  MUCUS.forEach((m) => {
+    const on = day.mucus === m.key;
+    mrow.appendChild(el('button', { class: 'chip' + (on ? ' on' : ''),
+      onclick: () => _handlers.setDay(dateStr, { mucus: on ? null : m.key }) }, [m.label]));
+  });
+  card.appendChild(mrow);
+
   // temperature: for TODAY it lives in its own Temperature card; here (backfilling a past day) keep an inline field
   if (dateStr !== today()) {
     card.appendChild(el('div', { class: 'field-label', text: 'Morning temperature (optional)' }));
@@ -331,18 +345,18 @@ function moodOutlookCard(c) {
   const f = moodForecast(_data.cycles, _data.days, c.prediction);
   if (!f.ready) return null;
   if (!f.signal) {
-    return el('p', { class: 'mood-hint', text: 'No clear mood pattern yet — her moods look fairly even across the cycle so far. Keep logging.' });
+    return el('p', { class: 'mood-hint', text: 'No clear mood pattern yet — moods look fairly even across the cycle so far. Keep logging.' });
   }
   const daysTxt = f.lowFrom === f.lowTo ? `${f.lowFrom} day` : `${f.lowFrom}–${f.lowTo} days`;
   const card = el('div', { class: 'card outlook' }, [el('h3', { class: 'card-h', text: 'Mood outlook' })]);
   card.appendChild(el('p', {
-    text: `Her mood tends to dip in the ${daysTxt} before her period` + (f.forecastText ? ` — this cycle that's ${f.forecastText}.` : '.'),
+    text: `Mood tends to dip in the ${daysTxt} before the period` + (f.forecastText ? ` — this cycle around ${f.forecastText}.` : '.'),
   }));
   if (f.topSymptoms.length)
     card.appendChild(el('p', { class: 'muted small', text: `Often with: ${f.topSymptoms.join(', ')}.` }));
   card.appendChild(el('p', { class: 'muted small', text: f.sampleCycles < 2
-    ? 'Early read from ~1 cycle — it sharpens as she logs more. A pattern, not a certainty.'
-    : `From ${f.sampleCycles} cycles of her logs. A pattern, not a certainty.` }));
+    ? 'Early read from ~1 cycle — it sharpens with more logs. A pattern, not a certainty.'
+    : `From ${f.sampleCycles} cycles of logs. A pattern, not a certainty.` }));
   return card;
 }
 
@@ -377,7 +391,13 @@ function temperatureCard(dateStr) {
   } else if (a.series.length >= 1) {
     card.appendChild(el('p', { class: 'muted small', text: `${a.series.length} temp${a.series.length > 1 ? 's' : ''} logged this cycle — a few more and the thermal-shift chart appears.` }));
   } else {
-    card.appendChild(el('p', { class: 'muted small', text: 'Log her waking temperature each morning to build the chart and confirm ovulation.' }));
+    card.appendChild(el('p', { class: 'muted small', text: 'Log a morning temperature each day to build the chart and confirm ovulation.' }));
+  }
+
+  // cervical-mucus peak day (compact) — logged in the check-in above
+  const mp = mucusPeak(_data.cycles, _data.days);
+  if (mp) {
+    card.appendChild(el('p', { class: 'mucus-line', text: `Mucus peak day ${prettyDate(mp.peakDate)} — by the peak rule, likely infertile from ${prettyDate(mp.infertileFrom)}.` }));
   }
   return card;
 }
@@ -517,7 +537,7 @@ function viewStats() {
 
   if (!s.hasData) {
     wrap.appendChild(el('div', { class: 'card' }, [
-      el('p', { class: 'muted', text: 'Once a couple of periods are logged, her cycle stats show up here — average length, range, and how regular her cycle is.' }),
+      el('p', { class: 'muted', text: 'Once a couple of periods are logged, cycle stats show up here — average length, range, and how regular the cycle is.' }),
     ]));
     return wrap;
   }
@@ -594,7 +614,7 @@ function viewNotifications() {
   const trCard = el('div', { class: 'card' }, [
     el('h3', { class: 'card-h', text: 'Temperature reminder' }),
     el('div', { class: 'toggle-row' }, [
-      el('div', {}, [el('div', { text: 'Remind her to take her temperature' }), el('div', { class: 'muted small', text: 'Every morning at the time you pick.' })]),
+      el('div', {}, [el('div', { text: 'Daily temperature reminder' }), el('div', { class: 'muted small', text: 'A morning nudge at the time you pick.' })]),
       el('button', { class: 'switch' + (tempOn ? ' on' : ''), onclick: () => setNotifPref('temp', !tempOn) }, [el('span', { class: 'knob' })]),
     ]),
   ]);
@@ -606,7 +626,7 @@ function viewNotifications() {
   }
   wrap.appendChild(trCard);
 
-  wrap.appendChild(el('p', { class: 'disclaimer', text: 'Notifications come from a daily cloud check of her logged data.' }));
+  wrap.appendChild(el('p', { class: 'disclaimer', text: 'Notifications come from a daily cloud check of the logged data.' }));
   return wrap;
 }
 
@@ -640,7 +660,7 @@ function viewSettings() {
   });
   wrap.appendChild(el('div', { class: 'card' }, [
     el('h3', { class: 'card-h', text: 'Typical cycle length' }),
-    el('p', { class: 'muted small', text: 'Used for predictions until Juno has logged a couple of her cycles.' }),
+    el('p', { class: 'muted small', text: 'Used for predictions until Juno has logged a couple of cycles.' }),
     el('div', { class: 'inline' }, [lenIn, el('span', { class: 'muted', text: 'days' })]),
   ]));
 

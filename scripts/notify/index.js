@@ -43,19 +43,19 @@ function digestTriggers(cycles, days, settings) {
   const t = today();
   const out = [];
   if (!activePeriod(cycles) && p.daysUntil === 5) {
-    out.push({ key: 'period', body: `Heads up — her period is expected in about 5 days (around ${prettyDate(p.nextStart)}).` });
+    out.push({ key: 'period', body: `Heads up — period expected in about 5 days (around ${prettyDate(p.nextStart)}).` });
   }
   if (mode === 'avoid' && fert) {
     if (diffDays(t, fert.fertileStart) === 0) {
-      out.push({ key: 'redlight', body: `Red light — no unprotected sex starting today. She's fertile through ${prettyDate(fert.fertileEnd)}.` });
+      out.push({ key: 'redlight', body: `Red light — no unprotected sex starting today. Fertile through ${prettyDate(fert.fertileEnd)}.` });
     }
     const safeAgain = tc ? tc.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
     if (t === safeAgain) {
-      out.push({ key: 'greenlight', body: `Green light — you can have sex again as of today (past her fertile window). Not 100% — it's awareness, not birth control.` });
+      out.push({ key: 'greenlight', body: `Green light — you can have sex again as of today (past the fertile window). Not 100% — it's awareness, not birth control.` });
     }
   }
   if (mf && mf.signal && mf.forecastStart && t === mf.forecastStart) {
-    out.push({ key: 'mooddip', body: `Heads up — she may have a rougher few days ahead${mf.forecastEnd ? `, through ${prettyDate(mf.forecastEnd)}` : ''}.` });
+    out.push({ key: 'mooddip', body: `Heads up — mood may dip over the next few days${mf.forecastEnd ? `, through ${prettyDate(mf.forecastEnd)}` : ''}.` });
   }
   return out;
 }
@@ -115,7 +115,7 @@ async function main() {
     if (prefs.temp === true && settings.tempReminder && settings.tempReminder.time) {
       const target = hhmmToMin(settings.tempReminder.time);
       if (localMin >= target && localMin < target + REMINDER_WINDOW && sent.temp !== localDate) {
-        total += await send(uid, tokens, 'Time to take her temperature 🌡️ — right after waking, before getting up.', 'temp', localDate);
+        total += await send(uid, tokens, 'Time to take a temperature 🌡️ — right after waking, before getting up.', 'temp', localDate);
       }
     }
   }

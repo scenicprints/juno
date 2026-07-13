@@ -11,17 +11,17 @@ export function alerts(ctx) {
   // --- period timing ---
   if (p && p.state !== 'none' && !activePeriod) {
     const du = p.daysUntil; // diffDays(today, nextStart)
-    if (du <= -2) out.push({ level: 'warn', text: `Her period is about ${Math.abs(du)} days late.` });
-    else if (du === 0) out.push({ level: 'info', text: 'Her period is expected today.' });
-    else if (du >= 1 && du <= 3) out.push({ level: 'info', text: `Her period is likely in ~${du} day${du > 1 ? 's' : ''} (around ${prettyDate(p.nextStart)}).` });
+    if (du <= -2) out.push({ level: 'warn', text: `Period is about ${Math.abs(du)} days late.` });
+    else if (du === 0) out.push({ level: 'info', text: 'Period expected today.' });
+    else if (du >= 1 && du <= 3) out.push({ level: 'info', text: `Period likely in ~${du} day${du > 1 ? 's' : ''} (around ${prettyDate(p.nextStart)}).` });
   }
 
   // --- fertility window ---
   if (fert && mode === 'avoid') {
     const safeAgain = tempConfirm ? tempConfirm.infertileFrom : fmt(addDays(fert.fertileEnd, 1));
     const toOpen = diffDays(t, fert.fertileStart);
-    if (!tempConfirm && toOpen === 1) out.push({ level: 'warn', text: `Red light tomorrow — her fertile window opens (through ${prettyDate(fert.fertileEnd)}). No unprotected sex.` });
-    if (t === safeAgain) out.push({ level: 'info', text: `Green light — you can have sex again (past her fertile window). Still not birth control.` });
+    if (!tempConfirm && toOpen === 1) out.push({ level: 'warn', text: `Red light tomorrow — fertile window opens (through ${prettyDate(fert.fertileEnd)}). No unprotected sex.` });
+    if (t === safeAgain) out.push({ level: 'info', text: `Green light — you can have sex again (past the fertile window). Still not birth control.` });
   }
   if (fert && mode === 'conceive') {
     const toOpen = diffDays(t, fert.fertileStart);
@@ -32,8 +32,8 @@ export function alerts(ctx) {
   // --- mood dip ---
   if (moodF && moodF.signal && moodF.forecastStart) {
     const toDip = diffDays(t, moodF.forecastStart);
-    if (toDip === 1) out.push({ level: 'info', text: `Heads up: her mood may dip over the next few days (through ${prettyDate(moodF.forecastEnd)}).` });
-    else if (toDip <= 0 && diffDays(t, moodF.forecastEnd) >= 0) out.push({ level: 'info', text: `She may be in a lower-mood stretch now (through ${prettyDate(moodF.forecastEnd)}).` });
+    if (toDip === 1) out.push({ level: 'info', text: `Heads up: mood may dip over the next few days (through ${prettyDate(moodF.forecastEnd)}).` });
+    else if (toDip <= 0 && diffDays(t, moodF.forecastEnd) >= 0) out.push({ level: 'info', text: `Possible lower-mood stretch right now (through ${prettyDate(moodF.forecastEnd)}).` });
   }
 
   return out;

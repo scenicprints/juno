@@ -168,6 +168,16 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
 - **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### v0.7.1 — Mucus tracking + neutral wording  ✅ BUILT
+- **Cervical mucus** (compact): single-select chip row in the check-in (Dry/Sticky/Creamy/Egg-white/Watery
+  → `days.mucus`). `mucusPeak()` in `js/nfp.js` = last peak-type (eggwhite/watery) day; peak rule →
+  infertile from peak+4. Shown as a one-line note in the Temperature card. (Full sympto-thermal
+  cross-check into the green light NOT wired yet — offered; green light still temp-based.)
+- **Wording neutralized everywhere** (no "her"/"she") — reads fine on either partner's phone. Verified
+  zero leftover pronouns in the rendered DOM. Check-in title is now "Daily check-in".
+- **Note (data/battery):** the `*/15` notifier runs on GitHub's servers, NOT the phones — zero phone
+  battery/data cost; phones only wake on an actual push. Confirmed to the user.
+
 ### v0.7 — Notification prefs + NFP temperature chart  ✅ BUILT
 - **Notifications screen** (Settings → Notifications → `viewNotifications()`): per-type on/off toggles
   (period / redlight / greenlight / mooddip) stored in `settings.notifPrefs`; device enable lives here now.

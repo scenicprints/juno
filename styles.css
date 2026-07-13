@@ -184,6 +184,7 @@ input:focus { outline: none; border-color: var(--accent); }
 .inline-edit { width: auto; padding: 6px 8px; }
 .temp-chart { margin: 12px 0 4px; background: #1b1430; border: 1px solid var(--line); border-radius: 12px; padding: 6px; }
 .nfp-summary { margin-top: 4px; }
+.mucus-line { margin: 8px 0 0; font-size: 13px; color: var(--pink); }
 .nfp-summary .confirm-note, .nfp-summary .learning { margin: 6px 0 0; }
 
 /* toggle switch + rows */
