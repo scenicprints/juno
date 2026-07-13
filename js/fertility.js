@@ -2,7 +2,7 @@
 // SAFETY: this is fertility AWARENESS, not contraception. In 'avoid' mode we shade
 // the fertile window CONSERVATIVELY (wide) and err toward "cannot" whenever unsure.
 import { fmt, addDays, diffDays } from './dates.js';
-import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
+import { analyze as nfpAnalyze, mucusPeak, hasMucus } from './nfp.js';
 
 // Given a prediction (from predict.js) and mode, return key fertility dates.
 // Ovulation ~14 days before the next period (luteal phase is the stable part).
@@ -31,7 +31,7 @@ function firstMucusDay(cycles, days) {
   const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
   if (!starts.length || !days) return null;
   const cs = starts[starts.length - 1];
-  const ds = Object.keys(days).filter((x) => x >= cs && days[x].mucus && days[x].mucus !== 'dry').sort();
+  const ds = Object.keys(days).filter((x) => x >= cs && hasMucus(days[x])).sort();
   return ds.length ? ds[0] : null;
 }
 

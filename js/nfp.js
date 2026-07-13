@@ -12,7 +12,24 @@
 import { diffDays, fmt, addDays } from './dates.js';
 
 const SHIFT_MIN_F = 0.36; // °F ≈ 0.2°C
-const PEAK_TYPES = new Set(['eggwhite', 'watery']); // most-fertile ("peak-type") cervical mucus
+
+// Mucus is logged in two parts: sensation (felt) + characteristic (seen).
+// Peak-quality (most fertile) = a wet/slippery sensation OR stretchy characteristic.
+const PEAK_SENSATIONS = new Set(['wet', 'slippery', 'wetslippery']);
+export function isPeakMucus(day) {
+  if (!day) return false;
+  if (PEAK_SENSATIONS.has(day.mucusSensation)) return true;
+  if (day.mucusChar === 'stretchy') return true;
+  if (day.mucus === 'eggwhite' || day.mucus === 'watery') return true; // legacy single field
+  return false;
+}
+export function hasMucus(day) {
+  if (!day) return false;
+  if (day.mucusSensation && day.mucusSensation !== 'dry') return true;
+  if (day.mucusChar) return true;
+  if (day.mucus && day.mucus !== 'dry') return true; // legacy
+  return false;
+}
 
 export function currentCycleTemps(cycles, days) {
   const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
@@ -33,8 +50,8 @@ export function mucusPeak(cycles, days) {
   if (!starts.length || !days) return null;
   const cycleStart = starts[starts.length - 1];
   let peak = null;
-  Object.keys(days).filter((d) => d >= cycleStart && days[d].mucus).sort()
-    .forEach((d) => { if (PEAK_TYPES.has(days[d].mucus)) peak = d; });
+  Object.keys(days).filter((d) => d >= cycleStart).sort()
+    .forEach((d) => { if (isPeakMucus(days[d])) peak = d; });
   if (!peak) return null;
   return { peakDate: peak, infertileFrom: fmt(addDays(peak, 4)) };
 }

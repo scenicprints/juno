@@ -8,20 +8,20 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.3';
+export const APP_VERSION = '0.7.4';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
   'Cramps', 'Headache', 'Bloating', 'Tender breasts', 'Fatigue', 'Nausea',
   'Backache', 'Acne', 'Cravings', 'Irritable', 'Anxious', 'Insomnia',
 ];
-// Ordered by increasing fertility. Peak-type (most fertile) = egg-white + wet/slippery.
-// Keys are stable (don't rename) so already-logged data stays valid; labels use NFP wording.
-const MUCUS = [
-  { key: 'dry', label: 'Dry' }, { key: 'sticky', label: 'Sticky' }, { key: 'creamy', label: 'Creamy' },
-  { key: 'eggwhite', label: 'Egg-white' }, { key: 'watery', label: 'Wet/slippery' },
+// NFP mucus = two observations: sensation (felt) + characteristic (seen). Both single-select.
+const MUCUS_SENSATION = [
+  { key: 'dry', label: 'Dry' }, { key: 'moist', label: 'Moist' }, { key: 'wet', label: 'Wet' },
+  { key: 'slippery', label: 'Slippery' }, { key: 'wetslippery', label: 'Wet/slippery' },
 ];
-function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus)); }
+const MUCUS_CHAR = [{ key: 'tacky', label: 'Tacky' }, { key: 'stretchy', label: 'Stretchy' }]; // none = default
+function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus || d.mucusSensation || d.mucusChar)); }
 
 // tiny DOM helper
 function el(tag, props = {}, kids = []) {
@@ -315,15 +315,23 @@ function checkInCard(dateStr) {
   });
   card.appendChild(chips);
 
-  // cervical mucus (single-select, compact) — for the NFP peak-day sign
-  card.appendChild(el('div', { class: 'field-label', text: 'Cervical mucus' }));
-  const mrow = el('div', { class: 'chips' });
-  MUCUS.forEach((m) => {
-    const on = day.mucus === m.key;
-    mrow.appendChild(el('button', { class: 'chip' + (on ? ' on' : ''),
-      onclick: () => _handlers.setDay(dateStr, { mucus: on ? null : m.key }) }, [m.label]));
+  // cervical mucus — sensation (felt) + characteristic (seen), for the NFP peak-day sign
+  card.appendChild(el('div', { class: 'field-label', text: 'Mucus sensation' }));
+  const srow = el('div', { class: 'chips' });
+  MUCUS_SENSATION.forEach((m) => {
+    const on = day.mucusSensation === m.key;
+    srow.appendChild(el('button', { class: 'chip' + (on ? ' on' : ''),
+      onclick: () => _handlers.setDay(dateStr, { mucusSensation: on ? null : m.key }) }, [m.label]));
   });
-  card.appendChild(mrow);
+  card.appendChild(srow);
+  card.appendChild(el('div', { class: 'field-label', text: 'Mucus characteristic' }));
+  const crow = el('div', { class: 'chips' });
+  MUCUS_CHAR.forEach((m) => {
+    const on = day.mucusChar === m.key;
+    crow.appendChild(el('button', { class: 'chip' + (on ? ' on' : ''),
+      onclick: () => _handlers.setDay(dateStr, { mucusChar: on ? null : m.key }) }, [m.label]));
+  });
+  card.appendChild(crow);
 
   // temperature: for TODAY it lives in its own Temperature card; here (backfilling a past day) keep an inline field
   if (dateStr !== today()) {

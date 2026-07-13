@@ -180,11 +180,14 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   cost anywhere (no LLM at runtime). GitHub Actions free on public repo. Told the user: **zero phone
   battery/data cost** — the cron runs on GitHub's servers, phones only wake on an actual push.
 
-### v0.7.1 — Mucus tracking + neutral wording  ✅ BUILT
-- **Cervical mucus** (compact): single-select chip row in the check-in (Dry/Sticky/Creamy/Egg-white/Watery
-  → `days.mucus`). `mucusPeak()` in `js/nfp.js` = last peak-type (eggwhite/watery) day; peak rule →
-  infertile from peak+4. Shown as a one-line note in the Temperature card. (Full sympto-thermal
-  cross-check into the green light NOT wired yet — offered; green light still temp-based.)
+### v0.7.4 — NFP two-part mucus  ✅ BUILT
+- Mucus is now **sensation** (`days.mucusSensation`: dry/moist/wet/slippery/wetslippery) + **characteristic**
+  (`days.mucusChar`: tacky/stretchy; none=default), two single-select chip rows in the check-in.
+  `isPeakMucus()`/`hasMucus()` in `js/nfp.js`: peak-quality = wet/slippery sensation OR stretchy char;
+  fertile-start = any non-dry sensation or any char. Legacy `days.mucus` (v0.7.1–0.7.3) still honored.
+
+### v0.7.1 — Mucus tracking + neutral wording  ✅ BUILT (superseded by v0.7.4 for the mucus model)
+- Was a single chip row `days.mucus` (Dry/Sticky/Creamy/Egg-white/Watery). Neutral-wording pass here (kept).
 - **Wording neutralized everywhere** (no "her"/"she") — reads fine on either partner's phone. Verified
   zero leftover pronouns in the rendered DOM. Check-in title is now "Daily check-in".
 - **Note (data/battery):** the `*/15` notifier runs on GitHub's servers, NOT the phones — zero phone
