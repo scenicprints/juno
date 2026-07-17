@@ -77,10 +77,14 @@ async function send(uid, tokens, body, sentKey, localDate) {
 }
 
 async function main() {
-  const users = await db.collection('users').get();
+  // IMPORTANT: users/{uid} has no fields of its own — all data lives in its SUBcollections
+  // (cycles/days/meta). That makes it a Firestore "missing" document, which
+  // collection('users').get() does NOT return. listDocuments() DOES include them.
+  const userRefs = await db.collection('users').listDocuments();
+  console.log(`users found: ${userRefs.length}`);
   let total = 0;
-  for (const u of users.docs) {
-    const uid = u.id;
+  for (const uref of userRefs) {
+    const uid = uref.id;
     const [cycSnap, daySnap, setSnap, pushSnap] = await Promise.all([
       db.collection(`users/${uid}/cycles`).get(),
       db.collection(`users/${uid}/days`).where(admin.firestore.FieldPath.documentId(), '>=', DAYS_CUTOFF).get(),
@@ -93,6 +97,7 @@ async function main() {
     const settings = setSnap.exists ? setSnap.data() : {};
     const pushDoc = pushSnap.exists ? pushSnap.data() : {};
     const tokens = Array.isArray(pushDoc.tokens) ? pushDoc.tokens : [];
+    console.log(`user ${uid}: ${tokens.length} registered device token(s)`);
     if (!tokens.length) continue;
 
     const prefs = settings.notifPrefs || {};
