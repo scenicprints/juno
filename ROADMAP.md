@@ -168,6 +168,16 @@ setting, live Firestore sync, PWA service worker. Mood **forecast** stays in v0.
   expected-today, N-days-late, "not-safe window opens tomorrow" (avoid) / fertile starts (conceive),
   and mood-dip incoming. Pure logic in `js/alerts.js`. Works because she opens the app daily to log.
 - **True OS push — BUILT in v0.6** (user opted in). See §8 v0.6.
+### ⚠️ GOTCHA that silently killed ALL push (fixed 2026-07-17)
+`users/{uid}` has **no fields of its own** — every bit of data lives in its SUBcollections
+(`cycles`, `days`, `meta`). In Firestore that makes it a **"missing" document**, and
+**`db.collection('users').get()` does NOT return missing documents.** The notifier looped over an
+empty list and reported `done — 0 notification(s) sent` no matter how many devices were registered,
+so **no notification ever fired for anyone** (the iPhone/Android were both registered fine all along).
+**Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
+`users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
+here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
 ### v0.7.5–0.7.8 — PWA polish + data export  ✅ BUILT
 - v0.7.5: Android **Back** closes the day sheet / notifications sub-screen (history trap) instead of
   exiting; **pull-to-refresh disabled** (overscroll-behavior).
