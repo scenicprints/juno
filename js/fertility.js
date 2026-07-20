@@ -1,7 +1,7 @@
 // Juno — fertility "can / cannot" window. Pure functions.
 // SAFETY: this is fertility AWARENESS, not contraception. In 'avoid' mode we shade
 // the fertile window CONSERVATIVELY (wide) and err toward "cannot" whenever unsure.
-import { fmt, addDays, diffDays } from './dates.js';
+import { fmt, addDays, diffDays, today } from './dates.js';
 import { analyze as nfpAnalyze, mucusPeak, hasMucus } from './nfp.js';
 
 // Given a prediction (from predict.js) and mode, return key fertility dates.
@@ -65,9 +65,17 @@ export function classify(dateStr, ctx) {
   const eff = ctx.eff || ctx.fert; // effective window (calendar + temp + mucus)
 
   // actual logged period days
+  const t = today();
   for (const c of cycles) {
     if (!c.startDate) continue;
-    const end = c.endDate || c.startDate;
+    let end = c.endDate;
+    if (!end) {
+      // An entry with no end date is either the CURRENT period (still bleeding → it runs
+      // through today) or a stale entry someone forgot to close (→ just its start day, so an
+      // old forgotten entry doesn't paint months of the calendar as "period").
+      const age = diffDays(c.startDate, t);
+      end = (age >= 0 && age <= 12) ? t : c.startDate;
+    }
     if (dateStr >= c.startDate && dateStr <= end) return 'period';
   }
   if (!prediction || prediction.state === 'none') return 'can';
@@ -105,7 +113,10 @@ export function confirmedOvulation(cycles, days) {
 export function todayStatus(dateStr, ctx) {
   const cls = classify(dateStr, ctx);
   const mode = ctx.mode || 'avoid';
-  if (cls === 'period') return { key: 'period', label: 'Period', tone: 'period' };
+  // "Is she on her period RIGHT NOW?" is a different question from "was this a period day?".
+  // Only say Period while the entry is still OPEN — once it's marked ended, stop saying she's
+  // on her period, even on the end day itself. (The calendar still shows it as a period day.)
+  if (cls === 'period' && ctx.activePeriod) return { key: 'period', label: 'Period', tone: 'period' };
   if (ctx.prediction?.state === 'learning')
     return { key: 'learning', label: 'Still learning your cycle', tone: 'muted' };
   if (mode === 'avoid') {
