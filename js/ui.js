@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.8';
+export const APP_VERSION = '0.7.9';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -54,6 +54,16 @@ let _root, _data, _handlers;
 let view = { tab: 'today', calMonth: null, sheetDate: null, tempEditing: false };
 function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
 function setNotifPref(key, val) { _handlers.setSettings({ notifPrefs: { [key]: val }, tz: tzName() }); }
+
+// never create a second period entry for a day that already has one (duplicate/overlapping
+// entries are what left an old cycle open and made the app say "still on her period")
+function startPeriodGuarded(dateStr) {
+  if ((_data.cycles || []).some((c) => c.startDate === dateStr)) {
+    toast('A period is already logged as starting that day.');
+    return;
+  }
+  _handlers.startPeriod(dateStr);
+}
 
 // download all of the account's data as a JSON backup file
 function downloadData() {
@@ -320,7 +330,7 @@ function viewToday() {
   const active = activePeriod(_data.cycles);
   const periodBtn = active
     ? el('button', { class: 'btn', onclick: () => _handlers.endPeriod(active.id, today()) }, ['Period ended today'])
-    : el('button', { class: 'btn primary', onclick: () => _handlers.startPeriod(today()) }, ['Period started today']);
+    : el('button', { class: 'btn primary', onclick: () => startPeriodGuarded(today()) }, ['Period started today']);
   const picker = el('input', { class: 'daypick', type: 'date', value: today(), max: today() });
   picker.addEventListener('change', () => { if (picker.value) openSheet(picker.value); });
   const pickRow = el('label', { class: 'daypick-row' }, [
@@ -578,7 +588,7 @@ function daySheet(dateStr) {
   const close = () => overlayBack();
 
   const actions = el('div', { class: 'sheet-actions' });
-  actions.appendChild(el('button', { class: 'btn primary', onclick: () => { _handlers.startPeriod(dateStr); close(); } }, ['Mark period start']));
+  actions.appendChild(el('button', { class: 'btn primary', onclick: () => { startPeriodGuarded(dateStr); close(); } }, ['Mark period start']));
   if (active)
     actions.appendChild(el('button', { class: 'btn', onclick: () => { _handlers.endPeriod(active.id, dateStr); close(); } }, ['Mark period end']));
 
@@ -611,29 +621,47 @@ function viewStats() {
     wrap.appendChild(el('div', { class: 'card' }, [
       el('p', { class: 'muted', text: 'Once a couple of periods are logged, cycle stats show up here — average length, range, and how regular the cycle is.' }),
     ]));
-    return wrap;
+  } else {
+    const stat = (label, val, sub) => el('div', { class: 'statcard' }, [
+      el('div', { class: 'statval', text: val }),
+      el('div', { class: 'statlabel', text: label }),
+      sub ? el('div', { class: 'muted small', text: sub }) : null,
+    ]);
+    const grid = el('div', { class: 'stat-grid' });
+    grid.appendChild(stat('Avg cycle', s.avgCycle + ' d', `range ${s.minCycle}–${s.maxCycle} d`));
+    if (s.avgPeriod) grid.appendChild(stat('Avg period', s.avgPeriod + ' d'));
+    grid.appendChild(stat('Cycles tracked', String(s.cyclesLogged)));
+    if (s.regularity) grid.appendChild(stat('Regularity', s.regularity, `±${s.variability} d`));
+    wrap.appendChild(grid);
+
+    if (s.recent.length) {
+      const list = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Recent cycles' })]);
+      s.recent.forEach(r => list.appendChild(el('div', { class: 'cyc-row' }, [
+        el('span', { text: prettyDate(r.start) }),
+        el('span', { class: 'muted', text: r.length + ' days' }),
+      ])));
+      wrap.appendChild(list);
+    }
   }
 
-  const stat = (label, val, sub) => el('div', { class: 'statcard' }, [
-    el('div', { class: 'statval', text: val }),
-    el('div', { class: 'statlabel', text: label }),
-    sub ? el('div', { class: 'muted small', text: sub }) : null,
-  ]);
-  const grid = el('div', { class: 'stat-grid' });
-  grid.appendChild(stat('Avg cycle', s.avgCycle + ' d', `range ${s.minCycle}–${s.maxCycle} d`));
-  if (s.avgPeriod) grid.appendChild(stat('Avg period', s.avgPeriod + ' d'));
-  grid.appendChild(stat('Cycles tracked', String(s.cyclesLogged)));
-  if (s.regularity) grid.appendChild(stat('Regularity', s.regularity, `±${s.variability} d`));
-  wrap.appendChild(grid);
-
-  if (s.recent.length) {
-    const list = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Recent cycles' })]);
-    s.recent.forEach(r => list.appendChild(el('div', { class: 'cyc-row' }, [
-      el('span', { text: prettyDate(r.start) }),
-      el('span', { class: 'muted', text: r.length + ' days' }),
-    ])));
-    wrap.appendChild(list);
+  // every logged period — view + repair (end one that's still open, delete a duplicate)
+  const periods = (_data.cycles || []).filter((c) => c.startDate)
+    .slice().sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  if (periods.length) {
+    const card = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Logged periods' })]);
+    periods.forEach((c) => {
+      const acts = el('span', { class: 'row-acts' });
+      if (!c.endDate) acts.appendChild(el('button', { class: 'linkbtn tiny', onclick: () => _handlers.endPeriod(c.id, today()) }, ['End today']));
+      acts.appendChild(el('button', { class: 'linkbtn tiny danger-link', onclick: () => { if (window.confirm('Delete this period entry?')) _handlers.deleteCycle(c.id); } }, ['Delete']));
+      card.appendChild(el('div', { class: 'cyc-row' }, [
+        el('span', { text: prettyDate(c.startDate) + ' – ' + (c.endDate ? prettyDate(c.endDate) : 'ongoing') }),
+        acts,
+      ]));
+    });
+    card.appendChild(el('p', { class: 'muted small', text: 'Fix a mis-logged period here — end one that’s still open, or delete a duplicate.' }));
+    wrap.appendChild(card);
   }
+
   wrap.appendChild(el('p', { class: 'disclaimer', text: `Juno v${APP_VERSION}` }));
   return wrap;
 }

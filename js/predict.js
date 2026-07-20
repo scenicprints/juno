@@ -63,6 +63,10 @@ export function predict(cycles, settings = {}) {
 // current period (a cycle whose start <= today and no end, within ~10 days)
 export function activePeriod(cycles) {
   const t = today();
-  return cycles.find(c => c.startDate && !c.endDate &&
-    diffDays(c.startDate, t) >= 0 && diffDays(c.startDate, t) <= 12) || null;
+  const open = (cycles || []).filter(c => c.startDate && !c.endDate &&
+    diffDays(c.startDate, t) >= 0 && diffDays(c.startDate, t) <= 12);
+  if (!open.length) return null;
+  // the MOST RECENT open entry — using the first one meant "end period" could close an older
+  // stray entry and leave the current period still open (app kept saying "on her period")
+  return open.sort((a, b) => (a.startDate < b.startDate ? -1 : 1))[open.length - 1];
 }
