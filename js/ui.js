@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.7.9';
+export const APP_VERSION = '0.8.0';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -650,15 +650,23 @@ function viewStats() {
   if (periods.length) {
     const card = el('div', { class: 'card' }, [el('h3', { class: 'card-h', text: 'Logged periods' })]);
     periods.forEach((c) => {
-      const acts = el('span', { class: 'row-acts' });
-      if (!c.endDate) acts.appendChild(el('button', { class: 'linkbtn tiny', onclick: () => _handlers.endPeriod(c.id, today()) }, ['End today']));
-      acts.appendChild(el('button', { class: 'linkbtn tiny danger-link', onclick: () => { if (window.confirm('Delete this period entry?')) _handlers.deleteCycle(c.id); } }, ['Delete']));
-      card.appendChild(el('div', { class: 'cyc-row' }, [
+      const block = el('div', { class: 'per-row' });
+      block.appendChild(el('div', { class: 'cyc-row' }, [
         el('span', { text: prettyDate(c.startDate) + ' – ' + (c.endDate ? prettyDate(c.endDate) : 'ongoing') }),
-        acts,
+        el('button', { class: 'linkbtn tiny danger-link', onclick: () => { if (window.confirm('Delete this period entry?')) _handlers.deleteCycle(c.id); } }, ['Delete']),
       ]));
+      if (!c.endDate) {
+        // pick the real end date — never assume "today" (an old unfinished entry would
+        // otherwise become a months-long period)
+        const endIn = el('input', { class: 'end-date', type: 'date', value: today(), min: c.startDate, max: today() });
+        endIn.addEventListener('change', () => { if (endIn.value) _handlers.endPeriod(c.id, endIn.value); });
+        block.appendChild(el('label', { class: 'end-line' }, [
+          el('span', { class: 'muted small', text: 'Set end date' }), endIn,
+        ]));
+      }
+      card.appendChild(block);
     });
-    card.appendChild(el('p', { class: 'muted small', text: 'Fix a mis-logged period here — end one that’s still open, or delete a duplicate.' }));
+    card.appendChild(el('p', { class: 'muted small', text: 'Fix a mis-logged period here — set the end date on one that’s still open, or delete a duplicate.' }));
     wrap.appendChild(card);
   }
 

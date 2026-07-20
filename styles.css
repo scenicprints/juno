@@ -70,6 +70,10 @@ input:focus { outline: none; border-color: var(--accent); }
 .statlabel { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; margin-top: 2px; }
 .cyc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .row-acts { display: flex; gap: 14px; align-items: center; flex: none; }
+.per-row .cyc-row { border-top: 1px solid var(--line); }
+.per-row:first-of-type .cyc-row { border-top: none; }
+.end-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 0 10px; }
+.end-date { width: auto; margin: 0; padding: 8px 10px; }
 .linkbtn.tiny { width: auto; padding: 0; font-size: 13px; }
 .danger-link { color: var(--danger); }
 .cyc-row:first-of-type { border-top: none; }
