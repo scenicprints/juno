@@ -60,13 +60,10 @@ export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
 
 // Classify a single date string for calendar shading + the Today banner.
 // Returns one of: 'period' | 'predictedPeriod' | 'cannot' | 'fertile' | 'peak' | 'can'
-export function classify(dateStr, ctx) {
-  const { cycles = [], prediction, mode = 'avoid' } = ctx;
-  const eff = ctx.eff || ctx.fert; // effective window (calendar + temp + mucus)
-
-  // actual logged period days
+// Is this date inside a logged period? (history — drives calendar shading)
+export function isPeriodDay(dateStr, cycles) {
   const t = today();
-  for (const c of cycles) {
+  for (const c of cycles || []) {
     if (!c.startDate) continue;
     let end = c.endDate;
     if (!end) {
@@ -76,11 +73,18 @@ export function classify(dateStr, ctx) {
       const age = diffDays(c.startDate, t);
       end = (age >= 0 && age <= 12) ? t : c.startDate;
     }
-    if (dateStr >= c.startDate && dateStr <= end) return 'period';
+    if (dateStr >= c.startDate && dateStr <= end) return true;
   }
-  if (!prediction || prediction.state === 'none') return 'can';
+  return false;
+}
 
-  // predicted next period band
+// Fertility state for a date, IGNORING whether it's also a logged period day.
+// Kept separate so a period day can never mask the fertile-window risk (short cycles mean
+// the fertile window can open while she's still bleeding / the day the period ends).
+export function fertilityClass(dateStr, ctx) {
+  const { prediction, mode = 'avoid' } = ctx;
+  const eff = ctx.eff || ctx.fert; // effective window (calendar + temp + mucus)
+  if (!prediction || prediction.state === 'none') return 'can';
   if (prediction.rangeStart && dateStr >= prediction.rangeStart && dateStr <= prediction.rangeEnd) {
     return 'predictedPeriod';
   }
@@ -98,6 +102,11 @@ export function classify(dateStr, ctx) {
   return 'can';
 }
 
+export function classify(dateStr, ctx) {
+  if (isPeriodDay(dateStr, ctx.cycles)) return 'period';
+  return fertilityClass(dateStr, ctx);
+}
+
 // Temperature-confirmed ovulation for the CURRENT cycle — delegates to the shared NFP
 // coverline/thermal-shift analysis (js/nfp.js) so the "green light" and the chart agree.
 // Returns { ovulation, shiftStart, infertileFrom } only once the shift is CONFIRMED (not tentative).
@@ -111,19 +120,23 @@ export function confirmedOvulation(cycles, days) {
 
 // Human-facing status for TODAY.
 export function todayStatus(dateStr, ctx) {
-  const cls = classify(dateStr, ctx);
   const mode = ctx.mode || 'avoid';
-  // "Is she on her period RIGHT NOW?" is a different question from "was this a period day?".
-  // Only say Period while the entry is still OPEN — once it's marked ended, stop saying she's
-  // on her period, even on the end day itself. (The calendar still shows it as a period day.)
-  if (cls === 'period' && ctx.activePeriod) return { key: 'period', label: 'Period', tone: 'period' };
+  // ALWAYS evaluate fertility from the window itself — never from the period overlay, or a
+  // just-ended period day would fall through and wrongly report "lower risk".
+  const f = fertilityClass(dateStr, ctx);
+
+  // Say "Period" only while the entry is still OPEN. But if the fertile window is already
+  // open (short cycles overlap), the risk warning wins — it's the one they act on.
+  if (ctx.activePeriod && isPeriodDay(dateStr, ctx.cycles) && !(mode === 'avoid' && f === 'cannot')) {
+    return { key: 'period', label: 'Period', tone: 'period' };
+  }
   if (ctx.prediction?.state === 'learning')
     return { key: 'learning', label: 'Still learning your cycle', tone: 'muted' };
   if (mode === 'avoid') {
-    if (cls === 'cannot') return { key: 'cannot', label: 'Not safe — fertile window', tone: 'cannot' };
+    if (f === 'cannot') return { key: 'cannot', label: 'Not safe — fertile window', tone: 'cannot' };
     return { key: 'can', label: 'Lower-risk window', tone: 'can' };
   }
-  if (cls === 'peak') return { key: 'peak', label: 'Peak fertility', tone: 'peak' };
-  if (cls === 'fertile') return { key: 'fertile', label: 'Fertile window', tone: 'fertile' };
+  if (f === 'peak') return { key: 'peak', label: 'Peak fertility', tone: 'peak' };
+  if (f === 'fertile') return { key: 'fertile', label: 'Fertile window', tone: 'fertile' };
   return { key: 'low', label: 'Low fertility', tone: 'muted' };
 }
