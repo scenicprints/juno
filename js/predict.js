@@ -35,10 +35,13 @@ export function predict(cycles, settings = {}) {
   const lens = cycleLengths(cycles);
   const recent = lens.slice(-6);
 
-  let avgLen, spread, state;
+  let avgLen, spread, state, minLen = null, maxLen = null;
   if (recent.length >= 2) {
     avgLen = Math.round(mean(recent));
     spread = Math.max(Math.round(stdev(recent)), 2);
+    // the actual range drives the conservative calendar-rhythm fertile bounds (see fertility.js)
+    minLen = Math.min(...recent);
+    maxLen = Math.max(...recent);
     state = 'ready';
   } else {
     avgLen = Number(settings.typicalCycleLen) || DEFAULT_LEN;
@@ -53,7 +56,7 @@ export function predict(cycles, settings = {}) {
   const daysUntil = diffDays(today(), nextStart);
 
   return {
-    state, lastStart, avgLen, spread,
+    state, lastStart, avgLen, spread, minLen, maxLen,
     nextStart, rangeStart, rangeEnd,
     cycleDay, daysUntil,
     cyclesLogged: starts.length,

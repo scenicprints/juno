@@ -15,11 +15,25 @@ export function window(prediction, mode = 'avoid') {
   // base biological window: sperm ~5d before, egg ~1d after
   let openOffset = -5, closeOffset = 1;
   if (mode === 'avoid') { openOffset = -7; closeOffset = 2; } // conservative buffer
+  let fertileStart = fmt(addDays(ovulation, openOffset));
+  let fertileEnd = fmt(addDays(ovulation, closeOffset));
+
+  // AVOID: also apply the classic calendar-rhythm bounds from her ACTUAL cycle range —
+  // first fertile day = (shortest − 18), last fertile day = (longest − 11). Projecting
+  // ovulation from the AVERAGE alone is a false-safe whenever a cycle runs shorter than
+  // average (ovulation arrives earlier than predicted). Keep whichever bound is more
+  // conservative on each end.
+  if (mode === 'avoid' && prediction.lastStart && prediction.minLen && prediction.maxLen) {
+    const rhythmStart = fmt(addDays(prediction.lastStart, prediction.minLen - 19)); // cycle day (min−18)
+    const rhythmEnd = fmt(addDays(prediction.lastStart, prediction.maxLen - 12));   // cycle day (max−11)
+    if (rhythmStart < fertileStart) fertileStart = rhythmStart;
+    if (rhythmEnd > fertileEnd) fertileEnd = rhythmEnd;
+  }
 
   return {
     ovulation,
-    fertileStart: fmt(addDays(ovulation, openOffset)),
-    fertileEnd: fmt(addDays(ovulation, closeOffset)),
+    fertileStart,
+    fertileEnd,
     peakStart: fmt(addDays(ovulation, -1)),
     peakEnd: fmt(addDays(ovulation, 1)),
     mode,
@@ -50,7 +64,10 @@ export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
   if (mode === 'avoid') {
     const fm = firstMucusDay(cycles, days);
     if (fm && fm < fertileStart) fertileStart = fm;
-    if (tc && tc.infertileFrom > safeAgain) safeAgain = tc.infertileFrom;
+    // A CONFIRMED thermal shift is evidence that ovulation has passed, so it supersedes the
+    // calendar's guess for when the window closes — that's the payoff for taking temps.
+    if (tc) safeAgain = tc.infertileFrom;
+    // Mucus is the cross-check: it can only push "safe again" LATER, never earlier.
     if (mp && mp.infertileFrom > safeAgain) safeAgain = mp.infertileFrom;
   } else if (tc && tc.infertileFrom > safeAgain) {
     safeAgain = tc.infertileFrom;
