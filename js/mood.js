@@ -3,11 +3,12 @@
 // of the cycle, so this is more accurate than aligning to the start), finds where mood dips,
 // and projects that window onto the predicted next period. Correlation from her own logs — not a rule.
 import { fmt, addDays, diffDays, prettyDate } from './dates.js';
+import { cycleStarts } from './predict.js';
 
 const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
 
 export function moodForecast(cycles, days, prediction) {
-  const starts = (cycles || []).map(c => c.startDate).filter(Boolean).sort();
+  const starts = cycleStarts(cycles || []);
   if (starts.length < 2 || !days) return { ready: false };
 
   // observations from COMPLETED cycles (a period start exists after the logged day)

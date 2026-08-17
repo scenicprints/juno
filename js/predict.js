@@ -4,18 +4,36 @@ import { parse, fmt, addDays, diffDays, today } from './dates.js';
 
 const DEFAULT_LEN = 28;
 
-// sorted ascending list of start-date strings
+// A period start closer than this to the previous one can't be a new cycle — it's a
+// duplicate / stray entry (e.g. "started" tapped right after "ended"). Same threshold
+// cycleLengths() has always used to discard impossible gaps.
+export const MIN_CYCLE_DAYS = 15;
+
+// sorted ascending list of ALL start-date strings (raw — includes stray entries)
 export function sortedStarts(cycles) {
   return cycles.map(c => c.startDate).filter(Boolean).sort();
 }
 
+// The starts that actually begin a cycle: a start within MIN_CYCLE_DAYS of the previous kept
+// start is dropped as a stray. EVERYTHING that anchors on "the current cycle" (prediction,
+// fertile window, temp/mucus analysis, mood) must use this — a stray 1-day entry logged five
+// days after the real start once became the anchor and slid the whole fertile window 5 days.
+export function cycleStarts(cycles) {
+  const out = [];
+  for (const s of sortedStarts(cycles)) {
+    if (out.length && diffDays(out[out.length - 1], s) < MIN_CYCLE_DAYS) continue;
+    out.push(s);
+  }
+  return out;
+}
+
 // gaps between consecutive starts, in days
 export function cycleLengths(cycles) {
-  const s = sortedStarts(cycles);
+  const s = cycleStarts(cycles);
   const out = [];
   for (let i = 1; i < s.length; i++) out.push(diffDays(s[i - 1], s[i]));
-  // ignore obviously-wrong gaps (double logs / >90d)
-  return out.filter(n => n >= 15 && n <= 90);
+  // ignore obviously-wrong gaps (>90d = a missed log, not a cycle)
+  return out.filter(n => n >= MIN_CYCLE_DAYS && n <= 90);
 }
 
 function mean(a) { return a.reduce((x, y) => x + y, 0) / a.length; }
@@ -27,7 +45,7 @@ function stdev(a) {
 
 // Main prediction. `settings.typicalCycleLen` used before we have data.
 export function predict(cycles, settings = {}) {
-  const starts = sortedStarts(cycles);
+  const starts = cycleStarts(cycles);
   if (starts.length === 0) {
     return { state: 'none' };
   }

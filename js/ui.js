@@ -1,6 +1,6 @@
 // Juno — UI rendering (vanilla DOM, no framework).
-import { predict, activePeriod } from './predict.js';
-import { window as fertWindow, classify, todayStatus, confirmedOvulation, effectiveWindow } from './fertility.js';
+import { predict, activePeriod, MIN_CYCLE_DAYS } from './predict.js';
+import { classify, todayStatus, confirmedOvulation, effectiveWindow } from './fertility.js';
 import { moodForecast } from './mood.js';
 import { alerts } from './alerts.js';
 import { cycleStats } from './stats.js';
@@ -8,7 +8,7 @@ import { analyze as nfpAnalyze, mucusPeak } from './nfp.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.8.3';
+export const APP_VERSION = '0.8.4';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -55,13 +55,18 @@ let view = { tab: 'today', calMonth: null, sheetDate: null, tempEditing: false }
 function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } }
 function setNotifPref(key, val) { _handlers.setSettings({ notifPrefs: { [key]: val }, tz: tzName() }); }
 
-// never create a second period entry for a day that already has one (duplicate/overlapping
-// entries are what left an old cycle open and made the app say "still on her period")
+// Why a new period start can't be logged on `dateStr` (null = it can). A start within
+// MIN_CYCLE_DAYS of another start isn't a new cycle — it's a stray entry, and a stray entry
+// becomes the anchor for every prediction (one such tap slid the fertile window 5 days).
+function startBlockReason(dateStr) {
+  const near = (_data.cycles || []).find((c) => c.startDate && Math.abs(diffDays(c.startDate, dateStr)) < MIN_CYCLE_DAYS);
+  if (!near) return null;
+  if (near.startDate === dateStr) return 'A period is already logged as starting that day.';
+  return `A period already starts ${prettyDate(near.startDate)} — too close to be a new one. To fix a wrong date, delete that entry under Stats › Logged periods.`;
+}
 function startPeriodGuarded(dateStr) {
-  if ((_data.cycles || []).some((c) => c.startDate === dateStr)) {
-    toast('A period is already logged as starting that day.');
-    return;
-  }
+  const why = startBlockReason(dateStr);
+  if (why) { toast(why); return; }
   _handlers.startPeriod(dateStr);
 }
 
@@ -125,12 +130,11 @@ function attachSwipeDismiss(sheetEl, handle) {
 function mode() { return _data?.settings?.mode || 'avoid'; }
 function ctx() {
   const p = predict(_data.cycles, _data.settings);
-  const f = fertWindow(p, mode());
-  const eff = effectiveWindow(_data.cycles, _data.days, p, mode());
+  const eff = effectiveWindow(_data.cycles, _data.days, p, mode()); // the ONE window everything reads
   const tempConfirm = confirmedOvulation(_data.cycles, _data.days);
   const moodF = moodForecast(_data.cycles, _data.days, p);
   const activePeriodFlag = !!activePeriod(_data.cycles);
-  return { cycles: _data.cycles, prediction: p, fert: f, eff, mode: mode(), tempConfirm, moodF, activePeriod: activePeriodFlag };
+  return { cycles: _data.cycles, prediction: p, eff, mode: mode(), tempConfirm, moodF, activePeriod: activePeriodFlag };
 }
 
 // =================== AUTH VIEW ===================
@@ -222,22 +226,32 @@ function phaseRing(c) {
   const day = Math.min(Math.max(p.cycleDay, 1), L);
   const periodLen = cycleStats(_data.cycles).avgPeriod || 5;
 
+  // The ring reads the SAME effective window as the banner/calendar (calendar + temp + mucus),
+  // and the fertile arc is allowed to overlap the period — short cycles open the window while
+  // she's still bleeding, and the ring must not paint those days as merely "menstrual".
   let fS = null, fE = null;
-  if (c.fert && p.lastStart) {
-    fS = diffDays(p.lastStart, c.fert.fertileStart) + 1;
-    fE = diffDays(p.lastStart, c.fert.fertileEnd) + 1;
+  if (c.eff && p.lastStart) {
+    fS = diffDays(p.lastStart, c.eff.fertileStart) + 1;
+    fE = c.mode === 'avoid'
+      ? diffDays(p.lastStart, c.eff.safeAgain)         // last NOT-safe day
+      : diffDays(p.lastStart, c.eff.fertileEnd) + 1;
+    fE = Math.min(fE, L);
+    if (fS > fE) { fS = null; fE = null; }
   }
   const menEnd = Math.min(periodLen, L);
   const COL = { men: '#e0567f', fol: '#4fbf9f', fer: '#f4b8d0', lut: '#6b5a8f' };
-  const segs = [{ d0: 1, d1: menEnd, c: COL.men }];
-  if (fS != null && fE != null && fE > menEnd) {
-    fS = Math.max(fS, menEnd + 1); fE = Math.min(fE, L);
-    if (fS <= fE) {
-      if (fS > menEnd + 1) segs.push({ d0: menEnd + 1, d1: fS - 1, c: COL.fol });
-      segs.push({ d0: fS, d1: fE, c: COL.fer });
-      if (fE < L) segs.push({ d0: fE + 1, d1: L, c: COL.lut });
-    } else { segs.push({ d0: menEnd + 1, d1: L, c: COL.fol }); }
-  } else { segs.push({ d0: menEnd + 1, d1: L, c: COL.fol }); }
+  const phaseOf = (d) => {
+    if (fS != null && d >= fS && d <= fE) return 'fer'; // risk wins over the period colour, like the banner
+    if (d <= menEnd) return 'men';
+    if (fS == null || d < fS) return 'fol';
+    return 'lut';
+  };
+  const segs = [];
+  for (let d = 1; d <= L; d++) {
+    const k = phaseOf(d);
+    if (segs.length && segs[segs.length - 1].k === k) segs[segs.length - 1].d1 = d;
+    else segs.push({ k, d0: d, d1: d, c: COL[k] });
+  }
 
   const cx = 90, cy = 90, r = 72, sw = 15;
   const polar = (ang) => { const a = (ang - 90) * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
@@ -251,10 +265,11 @@ function phaseRing(c) {
     .map(s => arc((s.d0 - 1) / L * 360, s.d1 / L * 360, s.c)).join('');
   const [mx, my] = polar((day - 0.5) / L * 360);
 
+  const inFertile = fS != null && day >= fS && day <= fE;
   let phase = 'Luteal';
-  if (c.activePeriod || day <= menEnd) phase = 'Menstrual';
-  else if (fS != null && day >= fS && day <= fE) phase = 'Fertile';
-  else if (fS != null && day < fS) phase = 'Follicular';
+  if (inFertile) phase = 'Fertile';
+  else if (c.activePeriod || day <= menEnd) phase = 'Menstrual';
+  else if (fS == null || day < fS) phase = 'Follicular';
 
   const svg = `<svg viewBox="0 0 180 180" width="150" height="150" role="img" aria-label="Cycle phase">
     <circle cx="90" cy="90" r="72" stroke="#2a2140" stroke-width="15" fill="none"/>
@@ -327,10 +342,15 @@ function viewToday() {
   wrap.appendChild(temperatureCard(today()));
 
   // period action
+  // Two separate buttons that never trade places — the old single button flipped from
+  // "ended" to "started" under the thumb, and a second tap logged a phantom new period.
   const active = activePeriod(_data.cycles);
-  const periodBtn = active
-    ? el('button', { class: 'btn', onclick: () => _handlers.endPeriod(active.id, today()) }, ['Period ended today'])
-    : el('button', { class: 'btn primary', onclick: () => startPeriodGuarded(today()) }, ['Period started today']);
+  const startWhy = startBlockReason(today());
+  const startBtn = el('button', { class: 'btn' + (active || startWhy ? '' : ' primary'), onclick: () => startPeriodGuarded(today()) }, ['Period started today']);
+  if (active || startWhy) startBtn.disabled = true;
+  const endBtn = el('button', { class: 'btn' + (active ? ' primary' : ''), onclick: () => active && _handlers.endPeriod(active.id, today()) }, ['Period ended today']);
+  if (!active) endBtn.disabled = true;
+  const periodBtn = el('div', { class: 'period-btns' }, [startBtn, endBtn]);
   const picker = el('input', { class: 'daypick', type: 'date', value: today(), max: today() });
   picker.addEventListener('change', () => { if (picker.value) openSheet(picker.value); });
   const pickRow = el('label', { class: 'daypick-row' }, [
@@ -483,7 +503,9 @@ function temperatureCard(dateStr) {
 
 function nfpSummary(a) {
   const box = el('div', { class: 'nfp-summary' });
-  if (a.hasShift && a.infertileFrom) {
+  if (a.unreliable) {
+    box.appendChild(el('p', { class: 'learning', text: `Temperatures are too erratic to confirm ovulation this cycle (${a.disturbedCount} of ${a.series.length} readings out of line). Take it at the same time each morning, before getting up.` }));
+  } else if (a.hasShift && a.infertileFrom) {
     box.appendChild(el('p', { class: 'confirm-note', text: `✓ Thermal shift confirmed. Est. ovulation ${prettyDate(a.ovulationEst)}; post-ovulation (infertile) phase since ${prettyDate(a.infertileFrom)}.` }));
   } else if (a.hasShift && a.tentative) {
     box.appendChild(el('p', { class: 'learning', text: `A temperature rise has begun (est. ovulation ~${prettyDate(a.ovulationEst)}) — waiting for one more high reading to confirm.` }));
@@ -530,6 +552,10 @@ function temperatureChart(a) {
     let fill = '#a99fc4';
     if (shiftSet.has(p.date)) fill = '#c9a7ff';
     if (infertileIdx >= 0 && i >= infertileIdx) fill = '#4fbf9f';
+    if (p.disturbed) { // disturbed value — hollow, excluded from the rules
+      svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.t).toFixed(1)}" r="3.2" fill="none" stroke="#a99fc4" stroke-width="1.2"/>`;
+      return;
+    }
     svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.t).toFixed(1)}" r="3.2" fill="${fill}"/>`;
   });
   const labels = n <= 1 ? [0] : [...new Set([0, Math.floor((n - 1) / 2), n - 1])];

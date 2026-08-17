@@ -50,6 +50,11 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.8.4 (2026-08-17)** — fixed the "safe/not-safe flipped after ending her period" bug: a phantom
+period start (double-tap) had become the prediction anchor. Starts are now validated (`cycleStarts`),
+the Today period button is split in two, the predicted-period false-safe is closed, the ring reads the
+effective window, and noisy temperatures can no longer confirm ovulation. See §8 v0.8.4.
+
 **v0.7.0 — adds a Notifications-preferences screen, a daily temperature reminder, and an NFP
 temperature chart (coverline/shift/ovulation/infertile phase) on its own Today card.** Also v0.6.3
 fixed the "no active Service Worker" enable bug + actionable permission errors. Notifier now runs every
@@ -177,6 +182,47 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.8.4 — the "safe/not-safe flipped when we ended her period" bug  ✅ BUILT (2026-08-17)
+Diagnosed from the real export (Settings → Download my data — always ask for it first; it's the ground
+truth). **Root cause: a phantom period entry** `Aug 15 → Aug 15` sat five days after the real one
+(`Aug 10 → Aug 15`). It was created by tapping the Today period button twice: the ONE button flipped
+from "Period ended today" to "Period started today" in place, and `startPeriodGuarded` only blocked
+a duplicate on the *same date*. `predict()` anchored on the newest start with zero validation, so the
+whole cycle — next period, ovulation, fertile window — slid 5 days later: Aug 16 flipped to "safe",
+Aug 28–Sep 1 flipped to "not safe" (exactly his report). Fixes:
+- **`cycleStarts()` in `js/predict.js`** = the validated anchor list: a start < `MIN_CYCLE_DAYS` (15)
+  after the previous kept start is a stray, not a cycle. EVERY "current cycle" consumer now uses it —
+  predict, `nfp.currentCycleTemps`/`mucusPeak`, `fertility.firstMucusDay`, mood, stats. A stray entry
+  can no longer become the anchor (verified: with the phantom still present the anchor is Aug 10 again).
+- **Start guard** (`startBlockReason()` in ui.js): refuses a new start within 15 days of any existing
+  start, toast explains + points to Stats › Logged periods to fix a wrong date. Applies to the Today
+  button and the day sheet. **Today now has TWO buttons** ("started" / "ended") that never trade
+  places — the inactive one is disabled — so a double tap can't log a phantom.
+- **False-safe fixed:** `fertilityClass()` returned `predictedPeriod` BEFORE checking the fertile
+  window, so days inside the predicted-period range read "Lower-risk window" even while the (mucus/
+  temp-extended) window said not safe — his data showed that Aug 7–13. Risk is now evaluated first;
+  the predicted-period shading only applies when the window is closed.
+- **Phase ring** now reads the same effective window as the banner/calendar (`ctx.eff`; `ctx.fert`
+  removed) and its fertile arc may overlap the period (short cycles open the window while bleeding);
+  risk colour wins over period colour, like the banner. Previously it clamped fertile to start after
+  the period and used the raw calendar window → said "Luteal" while the banner said "Not safe".
+- **Temperature noise guard** (`js/nfp.js`): readings > 0.7°F off their neighbour-median are
+  Sensiplan "disturbed values" — drawn hollow, excluded from coverline/shift; if > ⅓ of a cycle's
+  readings are disturbed the series is `unreliable` and NO shift is confirmed (a shift "found" in
+  noise is a false SAFE). Her real July series (95.5–98.8°F swings) had "confirmed" ovulation from
+  that noise; it now shows "too erratic to confirm — take it at the same time each morning". A clean
+  textbook series is untouched; a single fever spike is now excluded instead of jamming the coverline.
+- **NOT changed (user's call):** the mucus model. `wet` stays peak-quality and the peak-rule +
+  temperature "later wins" double-check stays — that's the NFP method their church teaches. Note her
+  logging habit: "wet" nearly every day (12 peak-quality days in one cycle, incl. day 1 of bleeding)
+  means the mucus rule holds the window open right up to the next period. That's data, not a bug.
+- **Still to do by hand:** delete the phantom `Aug 15 – Aug 15` entry under Stats › Logged periods
+  (harmless to predictions now, but it's clutter). Old-version phones need a reload for the sw cache
+  bump (`juno-v0.8.4`).
+- **Verified** with a Node replay of the real pure modules against his export (fake `today()`), and
+  a browser harness that mounts `ui.js` with in-memory handlers: end-then-tap creates no entry, guard
+  toasts, banner "Not safe" on both false-safe repros, ring arcs contiguous.
 
 ### v0.7.5–0.7.8 — PWA polish + data export  ✅ BUILT
 - v0.7.5: Android **Back** closes the day sheet / notifications sub-screen (history trap) instead of

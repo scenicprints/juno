@@ -3,6 +3,7 @@
 // the fertile window CONSERVATIVELY (wide) and err toward "cannot" whenever unsure.
 import { fmt, addDays, diffDays, today } from './dates.js';
 import { analyze as nfpAnalyze, mucusPeak, hasMucus } from './nfp.js';
+import { cycleStarts } from './predict.js';
 
 // Given a prediction (from predict.js) and mode, return key fertility dates.
 // Ovulation ~14 days before the next period (luteal phase is the stable part).
@@ -42,7 +43,7 @@ export function window(prediction, mode = 'avoid') {
 
 // first day of any (non-dry) cervical mucus this cycle — where the fertile phase starts by the mucus sign
 function firstMucusDay(cycles, days) {
-  const starts = (cycles || []).map((c) => c.startDate).filter(Boolean).sort();
+  const starts = cycleStarts(cycles || []);
   if (!starts.length || !days) return null;
   const cs = starts[starts.length - 1];
   const ds = Object.keys(days).filter((x) => x >= cs && hasMucus(days[x])).sort();
@@ -102,19 +103,21 @@ export function fertilityClass(dateStr, ctx) {
   const { prediction, mode = 'avoid' } = ctx;
   const eff = ctx.eff || ctx.fert; // effective window (calendar + temp + mucus)
   if (!prediction || prediction.state === 'none') return 'can';
-  if (prediction.rangeStart && dateStr >= prediction.rangeStart && dateStr <= prediction.rangeEnd) {
-    return 'predictedPeriod';
-  }
+  // RISK FIRST. The fertile window is evaluated before any label — the "predicted period"
+  // shading is a forecast, not a safe day, and it used to return early here and report
+  // "Lower-risk" while the window (pushed late by mucus/temp) still said not safe.
   if (eff) {
     if (mode === 'avoid') {
       // fertile ("cannot") from the (possibly-earlier) start until confirmed safe again
-      if (dateStr >= eff.safeAgain) return 'can';
-      if (dateStr >= eff.fertileStart) return 'cannot';
-      return 'can';
+      if (dateStr >= eff.fertileStart && dateStr < eff.safeAgain) return 'cannot';
+    } else {
+      // conceive / neutral
+      if (dateStr >= eff.peakStart && dateStr <= eff.peakEnd) return 'peak';
+      if (dateStr >= eff.fertileStart && dateStr <= eff.fertileEnd) return 'fertile';
     }
-    // conceive / neutral
-    if (dateStr >= eff.peakStart && dateStr <= eff.peakEnd) return 'peak';
-    if (dateStr >= eff.fertileStart && dateStr <= eff.fertileEnd) return 'fertile';
+  }
+  if (prediction.rangeStart && dateStr >= prediction.rangeStart && dateStr <= prediction.rangeEnd) {
+    return 'predictedPeriod';
   }
   return 'can';
 }

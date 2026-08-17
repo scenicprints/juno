@@ -1,12 +1,12 @@
 // Juno — cycle statistics. Pure functions over cycle history.
 import { diffDays } from './dates.js';
-import { sortedStarts, cycleLengths } from './predict.js';
+import { cycleStarts, cycleLengths } from './predict.js';
 
 const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
 const stdev = (a) => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
 
 export function cycleStats(cycles) {
-  const starts = sortedStarts(cycles);
+  const starts = cycleStarts(cycles);
   const lengths = cycleLengths(cycles);
   const periodLens = (cycles || [])
     .filter(c => c.startDate && c.endDate)
