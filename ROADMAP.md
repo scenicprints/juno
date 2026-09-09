@@ -50,6 +50,12 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.3 (2026-09-09)** — past cycles were unreadable. v0.9.2 made the chart *geometrically* fit
+the width but the header labels did not: at 34 days the DATE row collapsed into one run of digits
+("2526272829303 1 1 2 3..."). The DAY and DATE labels now turn **upright** when a column is under
+13 units wide, so their horizontal footprint is the cap height instead of the string width.
+Measured worst-case overlap is 0 on 26-, 28-, 30-, 31-, 34-, 45- and 58-day cycles.
+
 **v0.9.2 (2026-09-08)** — Phases chart reworked on his feedback. **One CYCLE per page, all three
 phases on the one chart**, sized to fit the width so no phase is ever split across a scroll (the
 first cut scrolled sideways, which split a phase in half). Header rows now carry the **day of the
@@ -201,6 +207,22 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.3 — upright header labels so long cycles stay readable  ✅ BUILT (2026-09-09)
+"Past cycles dont fit on one page." They fitted the *width*, but the labels did not fit their
+columns, which amounts to the same thing on screen.
+
+- A horizontal 2-digit label needs roughly 1.2x its font size in width. Under about 13 units per
+  day the DAY and DATE rows collide, and a 34-day cycle is 9.4 units per day. Measured, not
+  guessed: 24 overlapping date labels at 34 days, 39 at 58 days.
+- Fix: **turn the DAY and DATE labels upright** (rotate -90) whenever `dayW < 13`. Rotated, a
+  label's horizontal footprint is its cap height (~0.72x font size), which fits any density a real
+  cycle produces. Font scales with the column, `clamp(dayW * 1.15, 5.5, 9)`.
+- Weekday stays horizontal, it is one character.
+- **When checking density, measure the label footprint, not just the column count.** "It fits the
+  viewBox" and "you can read it" are different questions, and only the second one matters.
+- Deliberately NOT done: projecting an in-progress cycle out to its predicted length. It was built,
+  then dropped — he said the current cycle was not the problem.
 
 ### v0.9.2 — Phases chart rework  ✅ BUILT (2026-09-08)
 His feedback on v0.9.0, in his words: more emphasis on the chart, easier to read; one phase must not

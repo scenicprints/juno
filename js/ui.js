@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.2';
+export const APP_VERSION = '0.9.3';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -620,12 +620,18 @@ function phaseChart(a, spans, cycle) {
   const dayW = avail / L;
   const xl = (d) => gut + (d - 1) * dayW;      // left edge of cycle day d
   const xc = (d) => gut + (d - 0.5) * dayW;    // centre of cycle day d
-  const tight = dayW < 13;
-  const fDay = tight ? 8.5 : 10, fDate = tight ? 8 : 9.5, fDow = tight ? 7 : 8;
+  // A horizontal 2-digit label needs about 1.2x its font size in width, so below ~13 units
+  // per day the DAY and DATE rows run together. Turned upright their footprint is only the
+  // cap height, which fits any density a real cycle produces.
+  const rot = dayW < 13;
+  const fRot = Math.max(Math.min(dayW * 1.15, 9), 5.5);
+  const fDay = rot ? fRot : 10, fDate = rot ? fRot : 9.5;
+  const fDow = Math.max(Math.min(dayW * 0.85, 8), 5);
+  const tight = rot;
   const dotR = Math.max(Math.min(dayW * 0.2, 4), 2.2);
   const mucR = Math.max(Math.min(dayW * 0.3, 6), 2.8);
 
-  const hBand = 21, hDay = 13, hDate = 12, hDow = 11, hBleed = 9, hPlot = 178, hMuc = 20, hPeak = 16;
+  const hBand = 21, hDay = rot ? 19 : 13, hDate = rot ? 19 : 12, hDow = 11, hBleed = 9, hPlot = 178, hMuc = 20, hPeak = 16;
   const yBand = 2, yDay = yBand + hBand, yDate = yDay + hDay, yDow = yDate + hDate;
   const yBleed = yDow + hDow, yPlot = yBleed + hBleed, yMuc = yPlot + hPlot, yPeak = yMuc + hMuc;
   const H = yPeak + hPeak;
@@ -679,16 +685,22 @@ function phaseChart(a, spans, cycle) {
   }
 
   // header rows: day of the phase, day of the month, weekday. Row labels sit in the gutter.
-  g += `<text x="1" y="${yDay + 9}" fill="#6f6790" font-size="6.5">DAY</text>`;
-  g += `<text x="1" y="${yDate + 8}" fill="#6f6790" font-size="6.5">DATE</text>`;
+  const tick = (x, yc, txt, fill, size, weight) => {
+    const w = weight ? ` font-weight="${weight}"` : '';
+    return rot
+      ? `<text x="${x.toFixed(1)}" y="${yc.toFixed(1)}" transform="rotate(-90 ${x.toFixed(1)} ${yc.toFixed(1)})" text-anchor="middle" dominant-baseline="central" fill="${fill}" font-size="${size}"${w}>${txt}</text>`
+      : `<text x="${x.toFixed(1)}" y="${(yc + size * 0.36).toFixed(1)}" text-anchor="middle" fill="${fill}" font-size="${size}"${w}>${txt}</text>`;
+  };
+  g += `<text x="1" y="${(yDay + hDay / 2 + 2).toFixed(1)}" fill="#6f6790" font-size="6.5">DAY</text>`;
+  g += `<text x="1" y="${(yDate + hDate / 2 + 2).toFixed(1)}" fill="#6f6790" font-size="6.5">DATE</text>`;
   for (let d = 1; d <= L; d++) {
     const p = phaseOfDay(d, a);
     const sp = spans[p];
     const date = addDaysStr(a.win.start, d - 1);
     const dt = parse(date);
-    g += `<text x="${xc(d).toFixed(1)}" y="${yDay + 9}" text-anchor="middle" fill="${PHASE_COL[p]}" font-size="${fDay}" font-weight="700">${d - sp.d0 + 1}</text>`;
-    g += `<text x="${xc(d).toFixed(1)}" y="${yDate + 8}" text-anchor="middle" fill="#ece7f7" font-size="${fDate}">${dt.getDate()}</text>`;
-    g += `<text x="${xc(d).toFixed(1)}" y="${yDow + 7}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
+    g += tick(xc(d), yDay + hDay / 2, d - sp.d0 + 1, PHASE_COL[p], fDay, 700);
+    g += tick(xc(d), yDate + hDate / 2, dt.getDate(), '#ece7f7', fDate);
+    g += `<text x="${xc(d).toFixed(1)}" y="${(yDow + 7).toFixed(1)}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
     const bleeding = periodEnd ? date <= periodEnd : d === 1;
     if (bleeding) {
       const bx = xc(d), by = yBleed + 4, br = Math.min(dayW * 0.22, 3.2);
