@@ -228,3 +228,23 @@ input:focus { outline: none; border-color: var(--accent); }
 .outlook { border-color: var(--pink); box-shadow: 0 0 0 1px rgba(244,184,208,0.14); }
 .mood-hint { text-align: center; color: var(--muted); font-size: 13px; margin: -2px 0 14px; }
 .disclaimer { margin-top: 18px; font-size: 12px; color: var(--muted); opacity: 0.8; text-align: center; }
+
+/* ---------- phases (three-phase chart) ---------- */
+.phase-head { text-align: center; }
+.phase-head-t { font-size: 15px; font-weight: 600; }
+.phase-head-s { font-size: 12px; color: var(--muted); }
+.cal-head .linkbtn:disabled { opacity: 0.28; }
+
+.phase-scroll {
+  overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+  background: #1b1430; border: 1px solid var(--line); border-radius: 12px;
+  padding: 6px 4px; margin: 0 0 4px;
+}
+.phase-svg { display: inline-block; }
+.phase-svg svg { display: block; }
+
+.rule-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.rule-row:first-of-type { border-top: none; padding-top: 2px; }
+.rule-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.rule-value { font-size: 15px; font-weight: 600; margin-top: 2px; }
+.rule-note { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }

@@ -53,7 +53,7 @@ export function currentCycleTemps(cycles, days) {
 }
 
 // flag readings that sit far off the median of their (up to 4) nearest neighbours
-function markDisturbed(series) {
+export function markDisturbed(series) {
   const n = series.length;
   for (let i = 0; i < n; i++) {
     const nb = [];

@@ -50,6 +50,12 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.0 (2026-09-08)** — adds the **Phases tab**: the three-phase model as the CCL course
+actually teaches it, on one chart per cycle. New `js/phases.js` implements the real rules (Day 5/6,
+Doering, Sympto-Thermal, Temperature-Only, Mucus-Only) instead of relabelling the existing window.
+It is a READ-ONLY addition: nothing in `fertility.js` / `nfp.js` changed, so the Today banner,
+calendar shading and notifications behave exactly as they did in v0.8.4. See §8 v0.9.0.
+
 **v0.8.4 (2026-08-17)** — fixed the "safe/not-safe flipped after ending her period" bug: a phantom
 period start (double-tap) had become the prediction anchor. Starts are now validated (`cycleStarts`),
 the Today period button is split in two, the predicted-period false-safe is closed, the ring reads the
@@ -93,6 +99,9 @@ Next: user finishes the 3 console steps → test on both phones → then v0.2 (t
 - `js/store.js` — Firebase (Auth + Firestore) read/write + live sync.
 - `js/predict.js` — cycle math (period prediction). **Pure functions.**
 - `js/fertility.js` — can/cannot window + temperature ovulation confirmation. **Pure functions.**
+- `js/nfp.js` — coverline / thermal-shift analysis shared by the banner and the temp chart. **Pure.**
+- `js/phases.js` — the CCL three-phase rules, one cycle at a time. **Pure functions.**
+  Read-only: nothing else in the app imports its output, so it cannot move the safety banner.
 - `js/mood.js` — mood logging + PMS pattern. **Pure functions.**
 - `js/ui.js` — calendar + screens.
 - `styles.css`, `manifest.webmanifest`, `sw.js` (service worker — added in v0.1 for offline/push), `icon.svg`.
@@ -182,6 +191,56 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.0 — Phases tab (the three-phase model, real CCL rules)  ✅ BUILT (2026-09-08)
+A fifth nav tab. One chart per cycle showing all three phases, plus a plain readout of which
+rule decided each boundary and what is still missing. Cycle picker walks back through history.
+
+**Why a separate module.** Juno already had a four-phase vocabulary (Menstrual / Follicular /
+Fertile / Luteal on the Today ring) driven by `fertility.js`, whose fertile window comes from
+calendar rhythm (`minLen - 19`) pulled earlier by first mucus. That is conservative but it is NOT
+the Day 5/6 or Doering rule, so a box labelled "Phase 1" off that math would disagree with the
+chart she works by hand. `js/phases.js` implements the taught rules instead, and deliberately
+feeds nothing back: **the Today banner, calendar shading and push notifications still run entirely
+on `fertility.js` / `nfp.js`.** Do not wire `phases.js` into them without re-reading §2.
+
+**Rules implemented** (all in `js/phases.js`, all pure):
+- **End of Phase 1** = the EARLIEST applicable of:
+  - *Day 5/6 rule* — days 1–5; days 1–6 only if every one of the last 12 cycles ran ≥26 days.
+    No history at all holds it at day 5.
+  - *Doering rule* — earliest "first day of temperature rise" across the last 12 cycles, minus 7.
+    Gated behind 6 cycles of temperature history, as the course requires.
+  - *Mucus appeared* — mucus ends Phase 1 whatever the day, so Phase 1 stops the day before.
+- **LTL** = highest normal temperature of the **Pre-Shift Six**; **HTL** = LTL + 0.4°F.
+  Disturbed readings are excluded (reuses `markDisturbed` from `nfp.js`, now exported).
+- **Peak Day** = the last day of more-fertile mucus. Taking the *last* peak-type day in the cycle
+  handles peak mucus returning during the drying days on its own: that later day becomes Peak Day.
+- **Start of Phase 3**, by whichever signs are charted:
+  - *Sympto-Thermal Rule* (mucus + temps) — the LATER of the 3rd drying-up day after Peak and the
+    3rd post-Peak temp above the LTL with that 3rd at/above the HTL. Weak 3rd → wait for a 4th
+    above the LTL.
+  - *Temperature-Only Rule* — 4th temp above the LTL with the last three at/above the HTL.
+  - *Mucus-Only Rule* — a full four days past Peak Day.
+  - Nothing confirmed → the day stays **Phase 2**. Never guess forward.
+
+**Conventions worth not re-deciding:**
+- A drying-up day must be a day she actually charted a mucus observation ("dry" counts). An
+  unobserved day is skipped, which can only ever DELAY Phase 3 — the safe direction.
+- Phase 3 opens in the **EVENING** of the confirming day, matching the paper chart's vertical line,
+  so that whole day is drawn as Phase 3 but is not a full Phase 3 day. Said plainly in the UI.
+- Phase 1 end takes the earliest rule rather than exposing the paper chart's rule checkbox as a
+  setting. Earliest is always the conservative side, and it needs no new setting to get wrong.
+- Colours follow the course booklet: Phase 1 blue, Phase 3 green, Phase 2 pink (the fertile one,
+  the one they act on).
+
+Chart carries: phase band with the menstruation bar under it, cycle-day numbers, temperature curve
+with LTL/HTL lines and the Pre-Shift Six ringed, the mucus symbol row (○ ⊖ ⊕), Peak Day marked **P**
+with the drying days numbered 1 2 3, the two vertical phase lines, and a today marker. Wider than
+the phone on purpose — it scrolls inside `.phase-scroll`.
+
+31 hand-checked assertions cover the rules (Pre-Shift Six/LTL/HTL, Day 5/6 with and without a short
+cycle, Doering gating and arithmetic, Peak Day incl. a returning peak, ST with a strong and a weak
+3rd temp, Temperature-Only, Mucus-Only, and unconfirmed staying Phase 2).
 
 ### v0.8.4 — the "safe/not-safe flipped when we ended her period" bug  ✅ BUILT (2026-08-17)
 Diagnosed from the real export (Settings → Download my data — always ask for it first; it's the ground
