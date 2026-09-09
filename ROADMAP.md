@@ -50,6 +50,16 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.2 (2026-09-08)** — Phases chart reworked on his feedback. **One CYCLE per page, all three
+phases on the one chart**, sized to fit the width so no phase is ever split across a scroll (the
+first cut scrolled sideways, which split a phase in half). Header rows now carry the **day of the
+phase** (restarting at 1 in each phase, coloured by phase) and the **date**, plus a weekday row,
+mirroring the paper chart's three header rows. Mucus symbols are **drawn SVG geometry**, not font
+glyphs, which were off by a pixel or two from their column. Chart got the room: viewBox matched to
+the card width so 1 unit is 1 CSS px on a phone (a 340-wide viewBox had been scaling everything
+down to 0.9), taller plot, and a per-phase summary table with dates underneath. Verified: a 30-day
+cycle fits 30 columns with zero label overlap and no document overflow.
+
 **v0.9.0 (2026-09-08)** — adds the **Phases tab**: the three-phase model as the CCL course
 actually teaches it, on one chart per cycle. New `js/phases.js` implements the real rules (Day 5/6,
 Doering, Sympto-Thermal, Temperature-Only, Mucus-Only) instead of relabelling the existing window.
@@ -191,6 +201,24 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.2 — Phases chart rework  ✅ BUILT (2026-09-08)
+His feedback on v0.9.0, in his words: more emphasis on the chart, easier to read; one phase must not
+span multiple pages; the bottom symbols did not line up with the days on top; the date and day of
+phase belong at the top. He liked how the phases themselves are shown, so that stayed.
+
+- **A "page" is a CYCLE, not a phase.** All three phases sit on one chart and the ‹ › picker moves
+  to the next cycle. An intermediate build read this as one phase per page with a segmented control
+  — wrong reading, reverted. Do not re-split the phases.
+- **Nothing scrolls sideways.** `dayW = avail / L`, so the cycle always fits. This is what "a phase
+  should not span multiple pages" actually meant: the old chart was 468px inside a 305px box.
+- **Header rows** = day of the phase (restarts at 1 per phase, coloured by phase), day of the month,
+  weekday. Bare day-of-month numbers, like the paper chart; the month lives in the card header.
+- **Mucus symbols are drawn geometry** (`mucusMark()`), never font glyphs. ○ ⊖ ⊕ carry their own
+  side bearings and sat visibly off-centre from their column. Verified aligned to <0.05 units.
+- **viewBox is 310, close to the real card width**, so 1 unit renders as ~1 CSS px on a phone and
+  scales up on a wider layout. A larger viewBox silently shrinks every font and mark.
+- At 30 columns the date row is dense but does not overlap. Checked, not assumed.
 
 ### v0.9.0 — Phases tab (the three-phase model, real CCL rules)  ✅ BUILT (2026-09-08)
 A fifth nav tab. One chart per cycle showing all three phases, plus a plain readout of which

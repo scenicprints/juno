@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.9.2';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -40,6 +40,8 @@ function el(tag, props = {}, kids = []) {
   });
   return n;
 }
+
+function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
 
 function toast(msg) {
   const t = document.createElement('div');
@@ -570,147 +572,180 @@ function temperatureChart(a) {
 }
 
 // =================== PHASES (the three phases, read the way the paper chart reads them) ===================
+// One CYCLE per page: all three phases on the one chart, sized to fit the width so no phase
+// is ever split across a scroll. The picker at the top pages to the next cycle.
 // Phase 1 blue, Phase 2 pink (the fertile one, the one they act on), Phase 3 green.
 const PHASE_COL = { 1: '#6fb3d6', 2: '#e5679a', 3: '#4fbf9f' };
+const PHASE_SUB = { 1: 'Non-fertile', 2: 'Fertile', 3: 'Non-fertile' };
+const DOW = ['s', 'm', 't', 'w', 't', 'f', 's'];
 
-function phaseRuns(a) {
-  const runs = [];
-  for (let d = 1; d <= a.lastDay; d++) {
-    const p = phaseOfDay(d, a);
-    if (runs.length && runs[runs.length - 1].p === p) runs[runs.length - 1].d1 = d;
-    else runs.push({ p, d0: d, d1: d });
+// The day span of each phase within the cycle.
+function phaseSpans(a) {
+  const p2End = a.p3StartDay != null ? a.p3StartDay - 1 : a.lastDay;
+  return {
+    1: { d0: 1, d1: a.p1EndDay, open: a.p1EndDay >= 1 },
+    2: { d0: a.p2StartDay, d1: p2End, open: p2End >= a.p2StartDay },
+    3: { d0: a.p3StartDay, d1: a.lastDay, open: a.p3StartDay != null },
+  };
+}
+
+// A mucus symbol drawn as real geometry, so it centres exactly on its column.
+// Font glyphs for these carry their own side bearings and sat off by a pixel or two.
+function mucusMark(cx, cy, kind, r) {
+  const col = kind === 'peak' ? '#f4b8d0' : kind === 'some' ? '#d6a8c8' : '#8d84a8';
+  const w = r < 3.4 ? 1.1 : 1.4;
+  let s = `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="${col}" stroke-width="${w}"/>`;
+  if (kind === 'some' || kind === 'peak') {
+    s += `<line x1="${(cx - r).toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(cx + r).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${col}" stroke-width="${w}"/>`;
   }
-  return runs;
+  if (kind === 'peak') {
+    s += `<line x1="${cx.toFixed(1)}" y1="${(cy - r).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${(cy + r).toFixed(1)}" stroke="${col}" stroke-width="${w}"/>`;
+  }
+  return s;
+}
+function mucusKind(day) {
+  if (!day) return null;
+  if (isPeakMucus(day)) return 'peak';
+  if (hasMucus(day)) return 'some';
+  if (day.mucusSensation || day.mucusChar || day.mucus) return 'none';
+  return null;
 }
 
-// mucus symbol for a charted day, matching the paper chart's key
-function mucusGlyph(day) {
-  if (!day) return '';
-  if (isPeakMucus(day)) return '⊕';                    // more fertile
-  if (hasMucus(day)) return '⊖';                       // less fertile
-  if (day.mucusSensation || day.mucusChar || day.mucus) return '○'; // charted, no mucus
-  return '';
-}
+// The whole cycle on one chart, fitted to the width.
+// Header rows carry the day OF THE PHASE, the date and the weekday.
+function phaseChart(a, spans, cycle) {
+  const L = Math.max(a.lastDay, 6);
+  const VB = 310, gut = 22, padR = 4;
+  const avail = VB - gut - padR;
+  const dayW = avail / L;
+  const xl = (d) => gut + (d - 1) * dayW;      // left edge of cycle day d
+  const xc = (d) => gut + (d - 0.5) * dayW;    // centre of cycle day d
+  const tight = dayW < 13;
+  const fDay = tight ? 8.5 : 10, fDate = tight ? 8 : 9.5, fDow = tight ? 7 : 8;
+  const dotR = Math.max(Math.min(dayW * 0.2, 4), 2.2);
+  const mucR = Math.max(Math.min(dayW * 0.3, 6), 2.8);
 
-// The whole cycle on one chart: phase band, temperatures with LTL/HTL, mucus, Peak Day.
-// Wider than the screen on purpose, so it scrolls inside its own box.
-function phaseChart(a, cycle) {
-  const L = Math.max(a.lastDay, 10);
-  const dayW = 14, gut = 36, padR = 12, padT = 4;
-  const bandH = 22, numH = 14, plotH = 120, mucH = 18, peakH = 16;
-  const W = gut + L * dayW + padR;
-  const H = padT + bandH + numH + plotH + mucH + peakH;
-  const xl = (d) => gut + (d - 1) * dayW;      // left edge of day d
-  const xc = (d) => gut + (d - 0.5) * dayW;    // centre of day d
-  const yBand = padT, yNum = padT + bandH, yPlot = padT + bandH + numH;
-  const yMuc = yPlot + plotH, yPeak = yMuc + mucH;
+  const hBand = 21, hDay = 13, hDate = 12, hDow = 11, hBleed = 9, hPlot = 178, hMuc = 20, hPeak = 16;
+  const yBand = 2, yDay = yBand + hBand, yDate = yDay + hDay, yDow = yDate + hDate;
+  const yBleed = yDow + hDow, yPlot = yBleed + hBleed, yMuc = yPlot + hPlot, yPeak = yMuc + hMuc;
+  const H = yPeak + hPeak;
 
-  const s = a.shift.series;
+  const all = a.shift.series;
   const hasLtl = a.shift.ltl != null;
   let tmin, tmax;
-  const temps = s.map((p) => p.t).concat(hasLtl ? [a.shift.ltl, a.shift.htl] : []);
+  const temps = all.map((q) => q.t).concat(hasLtl ? [a.shift.ltl, a.shift.htl] : []);
   if (temps.length) { tmin = Math.min(...temps); tmax = Math.max(...temps); }
   else { tmin = 97.0; tmax = 98.6; }
   if (tmax - tmin < 0.8) { const mid = (tmax + tmin) / 2; tmin = mid - 0.5; tmax = mid + 0.5; }
-  tmin -= 0.12; tmax += 0.12;
-  const y = (t) => yPlot + (tmax - t) / (tmax - tmin) * plotH;
+  tmin -= 0.14; tmax += 0.14;
+  const y = (t) => yPlot + (tmax - t) / (tmax - tmin) * hPlot;
 
   const byDay = {};
-  s.forEach((p) => { byDay[p.cycleDay] = p; });
+  all.forEach((q) => { byDay[q.cycleDay] = q; });
+  const days = _data.days || {};
   const periodEnd = cycle && cycle.endDate ? cycle.endDate : null;
 
-  let g = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Three-phase cycle chart">`;
+  let g = `<svg viewBox="0 0 ${VB} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" `
+        + `role="img" aria-label="Cycle chart, all three phases">`;
 
-  // phase band
-  phaseRuns(a).forEach((r) => {
-    const x = xl(r.d0), w = (r.d1 - r.d0 + 1) * dayW;
-    g += `<rect x="${x}" y="${yBand}" width="${w}" height="${bandH - 5}" fill="${PHASE_COL[r.p]}" opacity="0.85" rx="2"/>`;
-    if (w >= 50) {
-      g += `<text x="${x + w / 2}" y="${yBand + 12}" text-anchor="middle" fill="#151022" font-size="10" font-weight="700">PHASE ${r.p}</text>`;
-    }
+  // phase band across the top
+  [1, 2, 3].forEach((p) => {
+    const sp = spans[p];
+    if (!sp.open) return;
+    const x = xl(sp.d0), w = (sp.d1 - sp.d0 + 1) * dayW;
+    g += `<rect x="${x.toFixed(1)}" y="${yBand}" width="${w.toFixed(1)}" height="${hBand - 4}" fill="${PHASE_COL[p]}" rx="2.5"/>`;
+    const label = w >= 62 ? `PHASE ${p}` : w >= 26 ? `P${p}` : '';
+    if (label) g += `<text x="${(x + w / 2).toFixed(1)}" y="${yBand + 11}" text-anchor="middle" fill="#141020" font-size="10.5" font-weight="700">${label}</text>`;
   });
-  // menstruation, marked under the band the way the bleeding row is on paper
-  for (let d = 1; d <= L; d++) {
-    const date = addDaysStr(a.win.start, d - 1);
-    const bleeding = periodEnd ? date <= periodEnd : d === 1;
-    if (bleeding) g += `<rect x="${xl(d) + 1}" y="${yBand + bandH - 4}" width="${dayW - 2}" height="3" fill="#e0567f"/>`;
-  }
 
-  // cycle-day numbers
-  for (let d = 1; d <= L; d++) {
-    g += `<text x="${xc(d)}" y="${yNum + 10}" text-anchor="middle" fill="#8d84a8" font-size="8">${d}</text>`;
-  }
+  // plot ground, then the phase divider lines carried down through every row
+  g += `<rect x="${gut}" y="${yPlot}" width="${(dayW * L).toFixed(1)}" height="${hPlot}" fill="#1b1430" rx="3"/>`;
+  [2, 3].forEach((p) => {
+    if (!spans[p].open) return;
+    const x = xl(spans[p].d0);
+    g += `<line x1="${x.toFixed(1)}" y1="${yDay}" x2="${x.toFixed(1)}" y2="${(yPeak + 12).toFixed(1)}" stroke="${PHASE_COL[p]}" stroke-width="1.3" opacity="0.75"/>`;
+  });
 
-  // plot background + LTL / HTL
-  g += `<rect x="${gut}" y="${yPlot}" width="${L * dayW}" height="${plotH}" fill="#1b1430"/>`;
+  // LTL / HTL
   if (hasLtl) {
     const yL = y(a.shift.ltl), yH = y(a.shift.htl);
-    g += `<rect x="${gut}" y="${yH.toFixed(1)}" width="${L * dayW}" height="${(yL - yH).toFixed(1)}" fill="rgba(201,167,255,0.10)"/>`;
-    g += `<line x1="${gut}" y1="${yL.toFixed(1)}" x2="${W - padR}" y2="${yL.toFixed(1)}" stroke="#c9a7ff" stroke-width="1.3" stroke-dasharray="4 3"/>`;
-    g += `<line x1="${gut}" y1="${yH.toFixed(1)}" x2="${W - padR}" y2="${yH.toFixed(1)}" stroke="#f4b8d0" stroke-width="1.3" stroke-dasharray="4 3"/>`;
-    g += `<text x="2" y="${(yL + 3).toFixed(1)}" fill="#c9a7ff" font-size="8">LTL</text>`;
-    g += `<text x="2" y="${(yL + 12).toFixed(1)}" fill="#c9a7ff" font-size="8">${a.shift.ltl.toFixed(2)}</text>`;
-    g += `<text x="2" y="${(yH - 4).toFixed(1)}" fill="#f4b8d0" font-size="8">HTL</text>`;
-    g += `<text x="2" y="${(yH - 13).toFixed(1)}" fill="#f4b8d0" font-size="8">${a.shift.htl.toFixed(2)}</text>`;
+    g += `<rect x="${gut}" y="${yH.toFixed(1)}" width="${(dayW * L).toFixed(1)}" height="${(yL - yH).toFixed(1)}" fill="rgba(201,167,255,0.09)"/>`;
+    g += `<line x1="${gut}" y1="${yL.toFixed(1)}" x2="${(gut + dayW * L).toFixed(1)}" y2="${yL.toFixed(1)}" stroke="#c9a7ff" stroke-width="1.3" stroke-dasharray="5 3"/>`;
+    g += `<line x1="${gut}" y1="${yH.toFixed(1)}" x2="${(gut + dayW * L).toFixed(1)}" y2="${yH.toFixed(1)}" stroke="#f4b8d0" stroke-width="1.3" stroke-dasharray="5 3"/>`;
+    g += `<text x="1" y="${(yL + 3).toFixed(1)}" fill="#c9a7ff" font-size="8.5" font-weight="700">LTL</text>`;
+    g += `<text x="1" y="${(yL + 11).toFixed(1)}" fill="#c9a7ff" font-size="8">${a.shift.ltl.toFixed(2)}</text>`;
+    g += `<text x="1" y="${(yH - 5).toFixed(1)}" fill="#f4b8d0" font-size="8.5" font-weight="700">HTL</text>`;
+    g += `<text x="1" y="${(yH - 13).toFixed(1)}" fill="#f4b8d0" font-size="8">${a.shift.htl.toFixed(2)}</text>`;
   }
 
-  // the vertical lines the paper chart draws: end of Phase 1, start of Phase 3
-  // the band above already names the phases, so these stay unlabelled
-  const vline = (x, col) => {
-    g += `<line x1="${x}" y1="${yBand}" x2="${x}" y2="${yMuc}" stroke="${col}" stroke-width="1.4"/>`;
-  };
-  if (a.p1EndDay >= 1 && a.p1EndDay < L) vline(xl(a.p1EndDay + 1), '#6fb3d6');
-  if (a.p3StartDay != null) vline(xl(a.p3StartDay), '#4fbf9f');
+  // header rows: day of the phase, day of the month, weekday. Row labels sit in the gutter.
+  g += `<text x="1" y="${yDay + 9}" fill="#6f6790" font-size="6.5">DAY</text>`;
+  g += `<text x="1" y="${yDate + 8}" fill="#6f6790" font-size="6.5">DATE</text>`;
+  for (let d = 1; d <= L; d++) {
+    const p = phaseOfDay(d, a);
+    const sp = spans[p];
+    const date = addDaysStr(a.win.start, d - 1);
+    const dt = parse(date);
+    g += `<text x="${xc(d).toFixed(1)}" y="${yDay + 9}" text-anchor="middle" fill="${PHASE_COL[p]}" font-size="${fDay}" font-weight="700">${d - sp.d0 + 1}</text>`;
+    g += `<text x="${xc(d).toFixed(1)}" y="${yDate + 8}" text-anchor="middle" fill="#ece7f7" font-size="${fDate}">${dt.getDate()}</text>`;
+    g += `<text x="${xc(d).toFixed(1)}" y="${yDow + 7}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
+    const bleeding = periodEnd ? date <= periodEnd : d === 1;
+    if (bleeding) {
+      const bx = xc(d), by = yBleed + 4, br = Math.min(dayW * 0.22, 3.2);
+      g += `<line x1="${(bx - br).toFixed(1)}" y1="${(by - br).toFixed(1)}" x2="${(bx + br).toFixed(1)}" y2="${(by + br).toFixed(1)}" stroke="#e0567f" stroke-width="1.5"/>`;
+      g += `<line x1="${(bx + br).toFixed(1)}" y1="${(by - br).toFixed(1)}" x2="${(bx - br).toFixed(1)}" y2="${(by + br).toFixed(1)}" stroke="#e0567f" stroke-width="1.5"/>`;
+    }
+  }
 
-  // temperature curve, drawn in unbroken runs so a gap in charting is a gap in the line
+  // temperature: unbroken runs only, so a day she did not chart leaves a real gap
   let run = [];
   const flush = () => {
     if (run.length > 1) {
-      const dd = run.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xc(p.cycleDay).toFixed(1)} ${y(p.t).toFixed(1)}`).join(' ');
-      g += `<path d="${dd}" fill="none" stroke="#8d7fbd" stroke-width="1.5"/>`;
+      const dd = run.map((q, k) => `${k === 0 ? 'M' : 'L'} ${xc(q.cycleDay).toFixed(1)} ${y(q.t).toFixed(1)}`).join(' ');
+      g += `<path d="${dd}" fill="none" stroke="#a294d4" stroke-width="1.8"/>`;
     }
     run = [];
   };
-  for (let d = 1; d <= L; d++) {
-    if (byDay[d]) run.push(byDay[d]);
-    else flush();
-  }
+  for (let d = 1; d <= L; d++) { if (byDay[d]) run.push(byDay[d]); else flush(); }
   flush();
-  s.forEach((p) => {
-    const cx = xc(p.cycleDay).toFixed(1), cy = y(p.t).toFixed(1);
-    if (p.disturbed) { // excluded from the rules, drawn hollow
-      g += `<circle cx="${cx}" cy="${cy}" r="3" fill="#1b1430" stroke="#a99fc4" stroke-width="1.2"/>`;
-      return;
-    }
-    const inPre = a.shift.preShiftSix.includes(p.date);
-    const fill = inPre ? '#c9a7ff' : (a.p3StartDay != null && p.cycleDay >= a.p3StartDay ? '#4fbf9f' : '#ece7f7');
-    g += `<circle cx="${cx}" cy="${cy}" r="3" fill="${fill}"/>`;
-    if (inPre) g += `<circle cx="${cx}" cy="${cy}" r="5.5" fill="none" stroke="#c9a7ff" stroke-width="1"/>`;
-  });
-
-  // mucus row
   for (let d = 1; d <= L; d++) {
-    const gl = mucusGlyph((_data.days || {})[addDaysStr(a.win.start, d - 1)]);
-    if (gl) g += `<text x="${xc(d)}" y="${yMuc + 13}" text-anchor="middle" fill="#f4b8d0" font-size="11">${gl}</text>`;
+    const q = byDay[d];
+    if (!q) continue;
+    const cx = xc(d), cy = y(q.t);
+    if (q.disturbed) {
+      g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${dotR.toFixed(1)}" fill="#1b1430" stroke="#a99fc4" stroke-width="1.3"/>`;
+      continue;
+    }
+    const inPre = a.shift.preShiftSix.includes(q.date);
+    if (inPre) g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(dotR + 2.4).toFixed(1)}" fill="none" stroke="#c9a7ff" stroke-width="1.1"/>`;
+    const fill = inPre ? '#c9a7ff' : (a.p3StartDay != null && d >= a.p3StartDay ? '#4fbf9f' : '#ffffff');
+    g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${dotR.toFixed(1)}" fill="${fill}"/>`;
   }
 
-  // Peak Day and the numbered drying-up days
+  // mucus row, then Peak Day and the numbered drying-up days
+  for (let d = 1; d <= L; d++) {
+    const kind = mucusKind(days[addDaysStr(a.win.start, d - 1)]);
+    if (kind) g += mucusMark(xc(d), yMuc + hMuc / 2, kind, mucR);
+  }
   if (a.peak) {
-    g += `<text x="${xc(a.peak.cycleDay)}" y="${yPeak + 12}" text-anchor="middle" fill="#ffd76e" font-size="11" font-weight="700">P</text>`;
-    a.peak.drying.forEach((date, i) => {
+    if (a.peak.cycleDay <= L) {
+      g += `<text x="${xc(a.peak.cycleDay).toFixed(1)}" y="${(yPeak + 11).toFixed(1)}" text-anchor="middle" fill="#ffd76e" font-size="${tight ? 9.5 : 11}" font-weight="700">P</text>`;
+    }
+    a.peak.drying.forEach((date, k) => {
       const d = diffDays(a.win.start, date) + 1;
-      g += `<text x="${xc(d)}" y="${yPeak + 12}" text-anchor="middle" fill="#ffd76e" font-size="10">${i + 1}</text>`;
+      if (d <= L) g += `<text x="${xc(d).toFixed(1)}" y="${(yPeak + 10).toFixed(1)}" text-anchor="middle" fill="#ffd76e" font-size="${tight ? 8 : 9.5}">${k + 1}</text>`;
     });
   }
 
   // today
   const td = diffDays(a.win.start, today()) + 1;
   if (td >= 1 && td <= L) {
-    g += `<line x1="${xc(td)}" y1="${yBand}" x2="${xc(td)}" y2="${yPeak + 14}" stroke="#ffffff" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/>`;
+    g += `<rect x="${xl(td).toFixed(1)}" y="${yPlot}" width="${dayW.toFixed(1)}" height="${hPlot}" fill="rgba(255,255,255,0.07)"/>`;
+    g += `<line x1="${xc(td).toFixed(1)}" y1="${yDay}" x2="${xc(td).toFixed(1)}" y2="${(yPeak + 13).toFixed(1)}" stroke="#ffffff" stroke-width="1" stroke-dasharray="2 3" opacity="0.6"/>`;
   }
 
   g += `</svg>`;
-  return el('div', { class: 'phase-scroll' }, [el('div', { class: 'phase-svg', html: g })]);
+  return el('div', { class: 'phase-chart', html: g });
 }
 
 function ruleRow(label, value, note) {
@@ -736,42 +771,77 @@ function viewPhases() {
   const a = analyzeCycle(wins, idx, _data.days);
   const win = wins[idx];
   const cycle = (_data.cycles || []).find((c) => c.startDate === win.start);
+  const spans = phaseSpans(a);
+  const todayDay = diffDays(win.start, today()) + 1;
+  const isNow = todayDay >= 1 && todayDay <= a.lastDay;
 
-  // cycle picker
-  const head = el('div', { class: 'cal-head' }, [
+  // one cycle per page
+  wrap.appendChild(el('div', { class: 'cal-head' }, [
     el('button', { class: 'linkbtn', disabled: idx === 0 ? '' : null,
       onclick: () => { view.phaseCycle = idx - 1; rerender(); } }, ['‹']),
     el('div', { class: 'phase-head' }, [
-      el('div', { class: 'phase-head-t', text: win.complete ? `${prettyDate(win.start)} to ${prettyDate(win.end)}` : `${prettyDate(win.start)}, in progress` }),
-      el('div', { class: 'phase-head-s', text: win.complete ? `${win.len} days` : `day ${a.lastDay}` }),
+      el('div', { class: 'phase-head-t', text: win.complete
+        ? `${prettyDate(win.start)} to ${prettyDate(win.end)}`
+        : `${prettyDate(win.start)}, in progress` }),
+      el('div', { class: 'phase-head-s', text: win.complete
+        ? `${win.len}-day cycle`
+        : `cycle day ${a.lastDay}` }),
     ]),
     el('button', { class: 'linkbtn', disabled: idx === wins.length - 1 ? '' : null,
       onclick: () => { view.phaseCycle = idx + 1; rerender(); } }, ['›']),
-  ]);
-  wrap.appendChild(head);
+  ]));
 
-  // the chart
-  const chartCard = el('div', { class: 'card' });
-  chartCard.appendChild(phaseChart(a, cycle));
-  const spanTxt = (p) => {
-    if (p === 1) return a.p1EndDay >= 1 ? `days 1 to ${a.p1EndDay}` : 'no infertile days';
-    if (p === 2) return a.p3StartDay != null ? `days ${a.p2StartDay} to ${a.p3StartDay - 1}` : `from day ${a.p2StartDay}, still open`;
-    return a.p3StartDay != null ? `from day ${a.p3StartDay}` : 'not open yet';
-  };
-  const leg = el('div', { class: 'legend' });
+  const card = el('div', { class: 'card phase-card' });
+
+  // where she is right now, said plainly, in phase terms
+  if (isNow) {
+    const p = phaseOfDay(todayDay, a);
+    const sp = spans[p];
+    card.appendChild(el('div', { class: 'phase-now', style: `border-color:${PHASE_COL[p]}` }, [
+      el('span', { class: 'phase-dot', style: `background:${PHASE_COL[p]}` }),
+      el('span', { class: 'phase-now-t', text: `Phase ${p}` }),
+      el('span', { class: 'phase-now-s', text: `day ${todayDay - sp.d0 + 1}${sp.d1 >= sp.d0 && (p !== 2 || a.p3StartDay != null) ? ` of ${sp.d1 - sp.d0 + 1}` : ''}` }),
+      el('span', { class: 'phase-now-d', text: prettyDate(today()) }),
+    ]));
+  }
+
+  card.appendChild(phaseChart(a, spans, cycle));
+
+  // one row per phase: dates and the day span
+  const tbl = el('div', { class: 'phase-rows' });
   [1, 2, 3].forEach((p) => {
-    leg.appendChild(el('div', { class: 'leg' }, [
-      el('span', { class: 'swatch', style: `background:${PHASE_COL[p]}` }),
-      el('span', { text: `Phase ${p}, ${spanTxt(p)}` }),
+    const sp = spans[p];
+    const open = sp.open;
+    const from = open ? addDaysStr(win.start, sp.d0 - 1) : null;
+    const to = open ? addDaysStr(win.start, sp.d1 - 1) : null;
+    const n = open ? sp.d1 - sp.d0 + 1 : 0;
+    tbl.appendChild(el('div', { class: 'phase-row' + (open ? '' : ' off') }, [
+      el('span', { class: 'phase-dot', style: `background:${PHASE_COL[p]}` }),
+      el('span', { class: 'pr-n', text: `Phase ${p}` }),
+      el('span', { class: 'pr-sub', text: PHASE_SUB[p] }),
+      el('span', { class: 'pr-when', text: open
+        ? (n === 1 ? prettyDate(from) : `${prettyDate(from)} to ${prettyDate(to)}`)
+        : (p === 3 ? 'not open yet' : 'no days') }),
+      el('span', { class: 'pr-len', text: open ? plural(n, 'day') : '' }),
     ]));
   });
-  chartCard.appendChild(leg);
-  wrap.appendChild(chartCard);
+  card.appendChild(tbl);
+
+  const key = el('div', { class: 'legend chart-key' });
+  [['✕', 'Menstruation', '#e0567f'], ['mucus-none', 'No mucus', '#8d84a8'],
+   ['mucus-some', 'Less fertile', '#d6a8c8'], ['mucus-peak', 'More fertile', '#f4b8d0'],
+   ['P', 'Peak Day, then drying days 1 2 3', '#ffd76e']].forEach(([sym, label, c]) => {
+    const mark = sym.startsWith('mucus-')
+      ? el('span', { class: 'key-svg', html: `<svg viewBox="0 0 14 14" width="14" height="14">${mucusMark(7, 7, sym.slice(6), 5)}</svg>` })
+      : el('span', { class: 'key-sym', style: `color:${c}`, text: sym });
+    key.appendChild(el('div', { class: 'leg' }, [mark, el('span', { text: label })]));
+  });
+  card.appendChild(key);
+  wrap.appendChild(card);
 
   // how this cycle was read
   const rules = el('div', { class: 'card' });
   rules.appendChild(el('p', { class: 'card-h', text: 'How this cycle was read' }));
-
   const d56 = a.phase1.day56, doer = a.phase1.doering;
   rules.appendChild(ruleRow(
     'End of Phase 1',

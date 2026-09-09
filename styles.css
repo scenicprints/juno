@@ -229,19 +229,42 @@ input:focus { outline: none; border-color: var(--accent); }
 .mood-hint { text-align: center; color: var(--muted); font-size: 13px; margin: -2px 0 14px; }
 .disclaimer { margin-top: 18px; font-size: 12px; color: var(--muted); opacity: 0.8; text-align: center; }
 
-/* ---------- phases (three-phase chart) ---------- */
+/* ---------- phases (one cycle per page, all three phases) ---------- */
 .phase-head { text-align: center; }
 .phase-head-t { font-size: 15px; font-weight: 600; }
 .phase-head-s { font-size: 12px; color: var(--muted); }
 .cal-head .linkbtn:disabled { opacity: 0.28; }
 
-.phase-scroll {
-  overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
-  background: #1b1430; border: 1px solid var(--line); border-radius: 12px;
-  padding: 6px 4px; margin: 0 0 4px;
+/* the chart is the point of this screen, so it gets the room */
+.phase-card { padding: 12px 8px 12px; }
+.phase-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+.phase-now {
+  display: flex; align-items: center; gap: 8px; margin: 0 4px 10px;
+  padding: 8px 12px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px;
+  background: #1b1430;
 }
-.phase-svg { display: inline-block; }
-.phase-svg svg { display: block; }
+.phase-now-t { font-size: 16px; font-weight: 700; }
+.phase-now-s { font-size: 13px; color: var(--muted); }
+.phase-now-d { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+.phase-chart { background: #191231; border: 1px solid var(--line); border-radius: 12px; padding: 5px 3px; }
+.phase-chart svg { display: block; width: 100%; height: auto; }
+
+.phase-rows { margin: 12px 2px 0; }
+.phase-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 4px;
+  border-top: 1px solid var(--line); font-size: 13px;
+}
+.phase-row.off { opacity: 0.45; }
+.phase-row .pr-n { font-weight: 700; }
+.phase-row .pr-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.phase-row .pr-when { margin-left: auto; color: var(--accent); font-size: 12px; white-space: nowrap; }
+.phase-row .pr-len { color: var(--muted); font-size: 11px; min-width: 46px; text-align: right; }
+
+.chart-key { gap: 8px 14px; margin-top: 12px; padding: 0 4px; }
+.chart-key .key-sym { font-size: 13px; font-weight: 700; width: 14px; text-align: center; }
+.chart-key .key-svg { display: inline-flex; width: 14px; height: 14px; }
 
 .rule-row { padding: 10px 0; border-top: 1px solid var(--line); }
 .rule-row:first-of-type { border-top: none; padding-top: 2px; }
