@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.3';
+export const APP_VERSION = '0.9.4';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -39,6 +39,26 @@ function el(tag, props = {}, kids = []) {
     n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   });
   return n;
+}
+
+// Drop the cached app shell and every service worker, then reload from the network.
+// Data is in Firestore, so there is nothing here to lose.
+async function forceUpdate() {
+  toast('Fetching a fresh copy...');
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (_) { /* keep going, the reload still helps */ }
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch (_) { /* same */ }
+  // a changing query string defeats the browser's own HTTP cache too
+  location.replace(location.pathname + '?fresh=' + Date.now());
 }
 
 function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
@@ -624,12 +644,18 @@ function phaseChart(a, spans, cycle) {
   // per day the DAY and DATE rows run together. Turned upright their footprint is only the
   // cap height, which fits any density a real cycle produces.
   const rot = dayW < 13;
-  const fRot = Math.max(Math.min(dayW * 1.15, 9), 5.5);
+  const fRot = Math.min(Math.max(dayW * 1.15, 6), 9);   // never shrink below legible
   const fDay = rot ? fRot : 10, fDate = rot ? fRot : 9.5;
-  const fDow = Math.max(Math.min(dayW * 0.85, 8), 5);
+  const fDow = Math.min(Math.max(dayW * 0.85, 6), 8);
   const tight = rot;
-  const dotR = Math.max(Math.min(dayW * 0.2, 4), 2.2);
-  const mucR = Math.max(Math.min(dayW * 0.3, 6), 2.8);
+  // A rotated label takes its cap height sideways, an upright one its whole string width.
+  // When even that will not fit the column, label every Nth day rather than every day. The
+  // whole cycle still sits in one view, which is the point, just with a sparser axis.
+  const footprint = rot ? fRot * 0.8 : fDate * 1.35;
+  const step = Math.max(1, Math.ceil(footprint / dayW));
+  const labelled = (d) => (d - 1) % step === 0;
+  const dotR = Math.min(Math.max(dayW * 0.2, 0.9), 4);
+  const mucR = Math.min(Math.max(dayW * 0.3, 1.1), 6);
 
   const hBand = 21, hDay = rot ? 19 : 13, hDate = rot ? 19 : 12, hDow = 11, hBleed = 9, hPlot = 178, hMuc = 20, hPeak = 16;
   const yBand = 2, yDay = yBand + hBand, yDate = yDay + hDay, yDow = yDate + hDate;
@@ -698,9 +724,12 @@ function phaseChart(a, spans, cycle) {
     const sp = spans[p];
     const date = addDaysStr(a.win.start, d - 1);
     const dt = parse(date);
-    g += tick(xc(d), yDay + hDay / 2, d - sp.d0 + 1, PHASE_COL[p], fDay, 700);
-    g += tick(xc(d), yDate + hDate / 2, dt.getDate(), '#ece7f7', fDate);
-    g += `<text x="${xc(d).toFixed(1)}" y="${(yDow + 7).toFixed(1)}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
+    if (labelled(d)) {
+      g += tick(xc(d), yDay + hDay / 2, d - sp.d0 + 1, PHASE_COL[p], fDay, 700);
+      g += tick(xc(d), yDate + hDate / 2, dt.getDate(), '#ece7f7', fDate);
+      g += `<text x="${xc(d).toFixed(1)}" y="${(yDow + 7).toFixed(1)}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
+      if (step > 1) g += `<line x1="${xc(d).toFixed(1)}" y1="${yPlot}" x2="${xc(d).toFixed(1)}" y2="${(yPlot + hPlot).toFixed(1)}" stroke="#2a2140" stroke-width="0.6"/>`;
+    }
     const bleeding = periodEnd ? date <= periodEnd : d === 1;
     if (bleeding) {
       const bx = xc(d), by = yBleed + 4, br = Math.min(dayW * 0.22, 3.2);
@@ -904,7 +933,7 @@ function viewPhases() {
   wrap.appendChild(rules);
 
   wrap.appendChild(el('p', { class: 'disclaimer',
-    text: 'Phase 3 opens in the EVENING of the day it is confirmed, so that whole day is not a Phase 3 day. Fertility awareness, not contraception.' }));
+    text: `Juno v${APP_VERSION} · Phase 3 opens in the EVENING of the day it is confirmed, so that whole day is not a Phase 3 day. Fertility awareness, not contraception.` }));
   return wrap;
 }
 
@@ -1149,6 +1178,12 @@ function viewSettings() {
     el('h3', { class: 'card-h', text: 'Your data' }),
     el('p', { class: 'muted small', text: 'Download everything (periods, temperatures, mucus, moods, settings) as a backup file.' }),
     el('button', { class: 'btn', onclick: () => downloadData() }, ['Download my data']),
+  ]));
+
+  wrap.appendChild(el('div', { class: 'card' }, [
+    el('h3', { class: 'card-h', text: 'App version' }),
+    el('p', { class: 'muted small', text: `Running v${APP_VERSION}. If the app looks out of date, this throws away the stored copy and reloads a fresh one. Your logs live in the cloud and are not touched.` }),
+    el('button', { class: 'btn', onclick: () => forceUpdate() }, ['Reload the app']),
   ]));
 
   wrap.appendChild(el('div', { class: 'card' }, [

@@ -50,6 +50,15 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.4 (2026-09-09)** — the fit-to-width math broke down on long cycles, which is where his real
+data lives. v0.9.3 clamped the rotated label font at a 5.5 floor, so below ~5.6 units per day the
+labels were wider than their columns again and a 74- or 121-day cycle smeared. Labels are now
+**thinned** (every Nth day) instead of shrunk past legibility, so the entire cycle always sits in
+one view. Verified 0 overlap and 0 clipping on 9, 26, 28, 29, 31, 34, 45, 58, 74 and 121-day cycles.
+Also added **Settings > Reload the app**, which drops the cached shell and every service worker and
+reloads with a cache-busting query, plus the version on the Phases tab — an installed PWA sitting on
+an old shell is otherwise invisible and un-debuggable from this side.
+
 **v0.9.3 (2026-09-09)** — past cycles were unreadable. v0.9.2 made the chart *geometrically* fit
 the width but the header labels did not: at 34 days the DATE row collapsed into one run of digits
 ("2526272829303 1 1 2 3..."). The DAY and DATE labels now turn **upright** when a column is under
@@ -207,6 +216,26 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.4 — thin the labels, and make a stale cached app recoverable  ✅ BUILT (2026-09-09)
+"I cannot scroll through to see an entire cycle." Third attempt at this.
+
+- **The real defect:** v0.9.3's `fRot` had a `Math.max(..., 5.5)` floor. Rotating fixed 26-58 day
+  cycles but a floor means that below ~5.6 units per day the label is wider than its column again.
+  Long cycles (a missed period start makes a 74- or 121-day "cycle", and `cycleWindows` does not
+  filter those the way `cycleLengths` does) went straight back to a smear.
+- **Fix:** never shrink a label below font 6. When it will not fit, label **every Nth day**
+  (`step = ceil(footprint / dayW)`, `labelled = (d) => (d - 1) % step === 0`, which is evenly
+  spaced and always includes day 1) and add a tick at each labelled column. The whole cycle stays
+  in one view, which is the requirement; the axis just gets sparser.
+- Marks scale without a floor too (`dotR`, `mucR`), so they do not pile up at extreme density.
+- **Settings > Reload the app** (`forceUpdate()`): deletes every cache, unregisters every service
+  worker, reloads with `?fresh=<ts>` to defeat the HTTP cache as well. The version now also shows
+  on the Phases tab. Three rounds were spent unable to tell "my layout is wrong" apart from "he is
+  running an old cached shell", and that ambiguity was expensive.
+- **Lesson: test the degenerate lengths, not just the textbook ones.** Every round of this bug was
+  a floor or a clamp that held for 28 days and failed past 40, and the harness only had tidy
+  cycles in it.
 
 ### v0.9.3 — upright header labels so long cycles stay readable  ✅ BUILT (2026-09-09)
 "Past cycles dont fit on one page." They fitted the *width*, but the labels did not fit their
