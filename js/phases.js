@@ -31,6 +31,7 @@ const r2 = (n) => Math.round(n * 100) / 100;
 // One window per cycle. The newest one runs to today and is not complete.
 export function cycleWindows(cycles) {
   const starts = cycleStarts(cycles || []);
+  const byStart = new Map((cycles || []).filter((c) => c.startDate).map((c) => [c.startDate, c]));
   const t = today();
   return starts.map((s, i) => {
     const next = starts[i + 1] || null;
@@ -40,6 +41,7 @@ export function cycleWindows(cycles) {
       end: next ? addDaysStr(next, -1) : (t > s ? t : s),
       len: next ? diffDays(s, next) : null,
       complete: !!next,
+      periodEnd: (byStart.get(s) || {}).endDate || null,
     };
   });
 }
@@ -53,6 +55,16 @@ function cycleDay(win, dateStr) { return diffDays(win.start, dateStr) + 1; }
 // An unobserved day is not a drying-up day, which can only ever DELAY Phase 3.
 function mucusObserved(day) {
   return !!(day && (day.mucusSensation || day.mucusChar || day.mucus));
+}
+
+// Mucus cannot be read through bleeding. A period is wet by definition, and "wet" is one of
+// the peak-quality sensations, so a period day used to register as the most fertile mucus of
+// the cycle. Every mucus rule below therefore skips bleeding days. This cannot stretch Phase 1
+// past where the rules put it: its end is still capped by Day 5/6 and Doering.
+function isBleeding(win, dateStr, days) {
+  if (win.periodEnd && dateStr >= win.start && dateStr <= win.periodEnd) return true;
+  const f = days && days[dateStr] && days[dateStr].flow;
+  return !!(f && f !== 'none');
 }
 
 // ---------- temperature: Pre-Shift Six, LTL, HTL, first day of the rise ----------
@@ -88,21 +100,24 @@ export function thermalShift(win, days) {
 
 // ---------- mucus: Peak Day and the three days of drying up ----------
 
-// Peak Day = the LAST day of more-fertile mucus before the drying-up process begins.
-// Taking the last peak-type day in the cycle gives that answer on its own: if peak mucus
-// comes back during the drying days, that later day simply becomes Peak Day.
+// Peak Day = the LAST day of more-fertile mucus BEFORE the drying-up process begins.
+// Peak-quality mucus returning DURING the drying days moves Peak Day, because the drying
+// process restarted. Peak-quality mucus after three drying days have completed does NOT:
+// the Peak is confirmed by then and that is a new mucus patch, not a new Peak Day.
+// Scanning for "the last peak-type day in the cycle" got this wrong. A single wet or
+// slippery log weeks later dragged Peak Day to the end of the cycle, and the ST Rule then
+// waited on drying days and temperatures that were never coming, so Phase 3 never opened.
 export function peakDay(win, days) {
-  const ds = daysIn(win, days);
-  let peak = null;
-  ds.forEach((d) => { if (isPeakMucus(days[d])) peak = d; });
-  if (!peak) return null;
-  const drying = [];
+  const ds = daysIn(win, days).filter((d) => !isBleeding(win, d, days));
+  let peak = null, drying = [];
   for (const d of ds) {
-    if (d <= peak) continue;
+    if (isPeakMucus(days[d])) { peak = d; drying = []; continue; } // restarts the drying count
+    if (!peak) continue;
     if (!mucusObserved(days[d])) continue;
     drying.push(d);
-    if (drying.length >= DRY_DAYS) break;
+    if (drying.length >= DRY_DAYS) break;                          // confirmed, and now locked
   }
+  if (!peak) return null;
   return {
     date: peak,
     cycleDay: cycleDay(win, peak),
@@ -113,7 +128,7 @@ export function peakDay(win, days) {
 }
 
 function firstMucusDay(win, days) {
-  const ds = daysIn(win, days).filter((d) => hasMucus(days[d]));
+  const ds = daysIn(win, days).filter((d) => !isBleeding(win, d, days) && hasMucus(days[d]));
   return ds.length ? ds[0] : null;
 }
 

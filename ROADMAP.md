@@ -50,6 +50,16 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.5 (2026-09-09)** — two real correctness bugs in `peakDay()`, both spotted by him on his own
+data ("why in aug 10 to sep 4 is sep 3rd the peak day"). **(1) Peak Day never locked:** the scan
+reassigned it on every peak-type day, so the LAST one in the cycle won, and one late wet/slippery
+log dragged Peak Day to the end of the cycle. The ST Rule then waited on drying days and
+temperatures that were never coming, so Phase 3 never opened — which is also why cycles were
+missing a complete Phase 1/2/3. **(2) A period reads as peak mucus:** `wet` is a peak-quality
+sensation and bleeding is wet, so a period day registered as the most fertile mucus of the cycle
+and put Peak Day on day 1. Both fixed; 9 new regression tests, all 8 of the relevant ones verified
+failing against v0.9.4 first. Suite now 40.
+
 **v0.9.4 (2026-09-09)** — the fit-to-width math broke down on long cycles, which is where his real
 data lives. v0.9.3 clamped the rotated label font at a 5.5 floor, so below ~5.6 units per day the
 labels were wider than their columns again and a 74- or 121-day cycle smeared. Labels are now
@@ -216,6 +226,30 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.5 — Peak Day locks, and a period is not peak mucus  ✅ BUILT (2026-09-09)
+He read the charts against his own data and found both of these. Neither was a display bug.
+
+- **Peak Day never locked.** `peakDay()` did `ds.forEach(d => { if (isPeakMucus) peak = d })`, so
+  whichever peak-type day came LAST in the cycle won. A single slippery log three weeks after the
+  real peak became Peak Day. The rule is: peak-quality mucus returning *during* the drying days
+  moves Peak Day (drying restarted), but once three drying days have completed the Peak is
+  **confirmed and final** and a later patch is a NEW patch. Now a forward scan that resets the
+  drying count on a peak day and `break`s the moment three drying days accumulate.
+- **Knock-on:** with Peak Day dragged to day 25, the ST Rule needed three drying days plus three
+  post-Peak temperatures that never arrived, so Phase 3 never opened and no cycle had all three
+  phases. Fixing Peak Day fixed that too.
+- **A period is wet.** `PEAK_SENSATIONS` in `nfp.js` includes `wet`, and nothing excluded bleeding,
+  so period days read as the most fertile mucus of the cycle and Peak Day landed on day 1 during
+  menstruation. `isBleeding()` now excludes bleeding days (by the cycle's `endDate`, or any
+  `flow` value) from Peak detection, the drying count, and `firstMucusDay`.
+  This is safe in the Phase 1 direction because its end is still capped by Day 5/6 and Doering:
+  ignoring a period-day mucus log can never push Phase 1 past those.
+- **Do not "fix" `nfp.js` by removing `wet` from `PEAK_SENSATIONS`.** Wet IS peak-quality mucus.
+  The problem was never the sensation list, it was reading mucus through blood.
+- **The 31-test suite passed through both bugs.** Every case in it was a tidy textbook cycle with
+  no late mucus patch and no mucus logged during the period. Test the messy shapes real logging
+  produces, not the ones the rules are illustrated with.
 
 ### v0.9.4 — thin the labels, and make a stale cached app recoverable  ✅ BUILT (2026-09-09)
 "I cannot scroll through to see an entire cycle." Third attempt at this.
