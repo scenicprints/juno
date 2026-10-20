@@ -5,3 +5,8 @@ Thumbs.db
 *.log
 .env
 node_modules/
+
+# Juno has no dependencies and no build step. A lockfile here is always an accident
+# (an empty one invites `npm ci` and implies a toolchain that does not exist).
+package-lock.json
+node_modules/
