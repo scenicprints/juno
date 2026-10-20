@@ -267,6 +267,15 @@ on exited `ENOENT ... scripts/notify/package.json`, **exit 254, before node ever
   -f test=true` → `users found: 1` · `2 registered device token(s)` · send `1/2`. The dead token
   was auto-pruned, and a second run returned `1 registered device token(s)` · send **`1/1`** ·
   `done — 1 notification(s) sent.` A real push reached a real phone — this is not inferred.
+- **Careful what a green run actually proves.** `test=true` returns early (index.js line ~107), so
+  it never touches `digestTriggers()`; and a non-test run before 8:00am local skips the digest
+  block on the `DIGEST_LOCAL_MIN` gate, so it prints `done — 0 notification(s) sent.` and proves
+  nothing about the triggers either. A plain dispatch at 14:40 UTC did exactly that. What the
+  GitHub runs do prove: the static ESM imports of `js/predict|fertility|mood|dates.js` load (the
+  process would die at startup otherwise), `listDocuments()` finds the user, and FCM delivery
+  works. The trigger logic itself was then replayed **locally** — the exact expression sequence of
+  `digestTriggers()` against the real pure modules over seven cycle shapes plus no-history and
+  neutral-mode, nothing thrown, and the period trigger firing precisely at `daysUntil === 5`.
 
 **⚠️ The `*/15` cron is a fiction — it runs about 5 times a day.** Measured over the last 100 runs:
 3–8 runs per day, hours apart, not the 96 the cron asks for. GitHub drops the overwhelming majority
