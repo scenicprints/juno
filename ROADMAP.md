@@ -274,9 +274,16 @@ because that one needs a secret and an `npm install` and this one must stay a cl
 
 **What made it possible:** a root `package.json` with `{ "private": true, "type": "module" }`, so
 Node will load `js/*.js` as ES modules. It adds **no dependency and no build step** — §3 still
-holds, any Claude account can still edit a file and push with zero toolchain. GitHub Pages ignores
-it (Jekyll excludes `package.json` by default, and `sw.js`'s `SHELL` list is explicit), and the live
-site was re-checked after the push.
+holds, any Claude account can still edit a file and push with zero toolchain. There is no
+`engines`-enforcement or install step anywhere; `"scripts": { "test": "node --test" }` is a
+convenience, not a toolchain.
+
+**The live site is unaffected, checked after the push** (not assumed): `scenicprints.github.io/juno/`
+loads and renders the sign-in screen with no console errors. Note that **Pages does serve the new
+files** — `/package.json` and `/tests/*.test.mjs` both return 200, so Jekyll's default exclude list
+is not in play here. That is harmless: the repo is public and code-only, nothing requests those
+paths, and `sw.js`'s `SHELL` list names its assets explicitly, so the cached app shell did not
+change. Do not put anything in the repo you would not publish.
 
 **Files:**
 - `tests/phases-rules.test.mjs` — the CCL rules: Pre-Shift Six/LTL/HTL, Day 5/6 with and without a
