@@ -65,9 +65,23 @@ export function markDisturbed(series) {
   }
 }
 
-// Cervical-mucus "Peak Day" for the current cycle = the LAST day of peak-type mucus.
-// By the NFP peak rule, the infertile phase begins the evening of the 3rd day after Peak,
-// so we report the 4th day as the first fully-infertile day (conservative).
+// Cervical-mucus "Peak Day" for the current cycle = the LAST day of peak-type mucus in the
+// whole cycle. By the NFP peak rule, the infertile phase begins the evening of the 3rd day
+// after Peak, so we report the 4th day as the first fully-infertile day (conservative).
+//
+// This is DELIBERATELY NOT the locked Peak Day that phases.js:peakDay() computes, and the two
+// must NOT be unified. They answer different questions:
+//   - phases.peakDay() charts ONE cycle's three phases, so its Peak locks once three drying
+//     days complete and a later patch is a new patch (v0.9.5).
+//   - this one feeds effectiveWindow(), where mucus may only ever push "safe again" LATER.
+//     Taking the last peak-type day means a fresh patch of fertile mucus after the drying
+//     days keeps the window open - which is what the method requires, because a new patch is
+//     a new fertile phase, and effectiveWindow() has no way to express "reopened".
+//
+// Measured against a real "wet on most days" logging pattern (2026-10-20): porting the lock
+// here moves Peak from May 28 to May 11 and collapses "safe again" from Jun 1 to May 15 -
+// 17 not-safe days turned safe, in Avoid mode. That is a false SAFE, the dangerous
+// direction. Locked by tests/invariants-safety.test.mjs. See ROADMAP SS2 and SS8 v0.9.8.
 export function mucusPeak(cycles, days) {
   const starts = cycleStarts(cycles || []);
   if (!starts.length || !days) return null;

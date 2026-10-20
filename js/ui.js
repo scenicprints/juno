@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.6';
+export const APP_VERSION = '0.9.8';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -534,10 +534,23 @@ function temperatureCard(dateStr) {
     card.appendChild(el('p', { class: 'muted small', text: 'Log a morning temperature each day to build the chart and confirm ovulation.' }));
   }
 
-  // cervical-mucus peak day (compact) — logged in the check-in above
-  const mp = mucusPeak(_data.cycles, _data.days);
-  if (mp) {
-    card.appendChild(el('p', { class: 'mucus-line', text: `Mucus peak day ${prettyDate(mp.peakDate)} — by the peak rule, likely infertile from ${prettyDate(mp.infertileFrom)}.` }));
+  // Peak Day, by the SAME locked rule the Phases tab charts, so the two never disagree on
+  // screen. Deliberately not nfp.mucusPeak(): that one tracks the last peak-type day as a
+  // conservative backstop for effectiveWindow() and would print a different, later date here.
+  const pw = cycleWindows(_data.cycles);
+  if (pw.length) {
+    const pa = analyzeCycle(pw, pw.length - 1, _data.days);
+    if (pa.peak) {
+      card.appendChild(el('p', { class: 'mucus-line', text: pa.peak.confirmed
+        ? `Peak Day ${prettyDate(pa.peak.date)} (day ${pa.peak.cycleDay}) — drying days 1, 2, 3 charted.`
+        : `Peak Day ${prettyDate(pa.peak.date)} (day ${pa.peak.cycleDay}) — ${pa.peak.drying.length} of 3 drying-up days charted.` }));
+      // When more fertile mucus has been logged since, the window is still being held open.
+      // Say so, or the banner looks like it contradicts the Peak Day printed right above it.
+      const mp = mucusPeak(_data.cycles, _data.days);
+      if (mp && mp.peakDate > pa.peak.date) {
+        card.appendChild(el('p', { class: 'muted small', text: `More fertile mucus has been logged since then (latest ${prettyDate(mp.peakDate)}), so the fertile window is still being held open. See Phases.` }));
+      }
+    }
   }
   return card;
 }

@@ -51,13 +51,22 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 
 ## 4. Current status
 **TESTS — the repo has a committed test suite as of 2026-10-20.** `node --test` from the repo
-root runs **65 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
+root runs **70 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
 dependencies and no build step (`node:test` + `node:assert` + a small DOM shim). It is wired to CI
 in `.github/workflows/tests.yml`. **Every "N-test suite" figure in the entries below was a
 SCRATCH-ONLY harness that was thrown away** — they are corrected in place now. See §8 "Tests".
-**No app code changed in this batch** — no `APP_VERSION` or service-worker bump and nothing for
-the phones to re-download. (The shipped app is still **v0.9.6**: v0.9.7 below was a notifier and
-documentation batch and did not touch `js/` either.)
+The shipped app is **v0.9.8**. Note v0.9.7 never had a shell version of its own: it was a
+notifier and documentation batch that touched no `js/` file, so there was nothing for the phones
+to re-download and no `APP_VERSION` bump. The app therefore went 0.9.6 → 0.9.8.
+
+**v0.9.8 (2026-10-20)** — settled the `nfp.mucusPeak()` / `phases.peakDay()` divergence that v0.9.6
+left open, and the answer was **do not unify them**. Measured first: porting v0.9.5's Peak Day lock
+into `mucusPeak()` moves Peak from May 28 to May 11 on a realistic "wet on most days" cycle and
+collapses "safe again" from Jun 1 to May 15 — **17 not-safe days turned safe, in Avoid mode.** That
+is a false SAFE, so the logic is unchanged and now carries a comment saying why. What WAS wrong was
+the display: the Temperature card printed `mucusPeak()`'s date while the Phases tab charted
+`peakDay()`'s, so the app showed two different Peak Days for one cycle. Both now read the locked
+rule. 5 new tests in `tests/invariants-safety.test.mjs` fail if anyone unifies them. See §8 v0.9.8.
 
 **v0.9.7 (2026-10-20)** — **the three-month push-notification outage is over.** The notifier had
 been dead since 2026-07-20 and nobody noticed: `scripts/notify/package.json` was deleted as
@@ -401,6 +410,46 @@ It is rewritten as the real open list.
 produced no signal anyone acted on, because nothing in the app changes when push stops — the app
 itself was fine the whole time. If you touch the notifier, run it with `-f test=true` and **read
 the log**, and when you delete files, run `git status` and look at what you are actually staging.
+
+### v0.9.8 — why mucusPeak() and peakDay() must stay different  ✅ BUILT (2026-10-20)
+v0.9.6 flagged that `nfp.mucusPeak()` never got v0.9.5's Peak Day lock or bleeding exclusion, while
+`phases.js:peakDay()` did, and left the call open. **The call is: leave the logic alone.** Do not
+"fix the inconsistency" — it is load-bearing.
+
+**Why, measured before deciding** (on `wetMostDays()` in `tests/helpers/fixtures.mjs`, which is her
+real logging habit from v0.8.4 — a wet sensation on most days, bleeding included):
+
+| | Peak Day | "safe again" |
+|---|---|---|
+| `nfp.mucusPeak()` as shipped | May 28 | **Jun 1** |
+| if v0.9.5's lock were ported | May 11 | May 15 |
+
+That is **17 not-safe days turned safe in Avoid mode** — a false SAFE, the one direction §2 says we
+never move in. The reason is structural, not a detail of this fixture: `effectiveWindow()` lets
+mucus push "safe again" **later only**, and it has no way to express "a new mucus patch reopened
+the window". Taking the LAST peak-type day is how that reopening gets represented at all. Lock it
+and a fresh patch of fertile mucus after the drying days silently stops counting.
+
+So the two functions answer different questions and both are right:
+- `phases.peakDay()` charts ONE cycle's three phases → its Peak **locks** after three drying days,
+  and a later patch is a new patch (v0.9.5). This is the one the method teaches, and the one shown.
+- `nfp.mucusPeak()` is a **safety backstop** for `effectiveWindow()` → last peak-type day, no lock,
+  deliberately wide. Never displayed.
+
+**What actually was broken: the display.** The Temperature card printed `mucusPeak()`'s date
+("Mucus peak day May 28 — likely infertile from Jun 1") while the Phases tab charted May 11. Two
+Peak Days for one cycle, plus a second "infertile from" claim competing with the banner. The card
+now reads the same locked `analyzeCycle(...).peak` the Phases tab does, shows the drying-day
+progress, and drops the rival infertile claim. When peak-quality mucus has been logged SINCE Peak
+Day it adds one line saying the window is still being held open — otherwise the banner looks like
+it contradicts the Peak Day printed directly above it.
+
+**Locked by tests** (`tests/invariants-safety.test.mjs`, 5 tests): mucus may only push "safe again"
+later or equal, never earlier; the two functions are asserted to disagree on this fixture with the
+exact dates; `safeAgain` is asserted to stay past the locked peak + 4; and the Phases tab and the
+Temperature card are asserted to quote the same Peak Day. **Verified these fail when the lock is
+ported** — mutating `mucusPeak()` to lock turns 2 of them red, with the measured cost in the
+failure message. Do not fix the test; revert the change.
 
 ### v0.9.6 — the paper chart's steps 1, 9 and 12  ✅ BUILT (2026-10-20)
 Checked the Phases tab line by line against the CCL "15 Steps of Paper Charting at a Glance" sheet.

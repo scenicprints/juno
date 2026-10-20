@@ -121,3 +121,31 @@ function logOneCycle(start, len) {
   [11, 12, 13].forEach((i) => put(i, { mucusSensation: 'dry' }));
   return days;
 }
+
+// ---------------------------------------------------------------------------
+// Her real logging habit, recorded in ROADMAP v0.8.4: a wet (peak-quality) sensation on most
+// days of the cycle, bleeding days included, broken by one short dry patch. This is the shape
+// that makes nfp.mucusPeak() and phases.peakDay() disagree, and it is why they must KEEP
+// disagreeing — see v0.9.8 and tests/invariants-safety.test.mjs.
+//
+// The cycle under test is the NEWEST one here, on purpose: mucusPeak() and effectiveWindow()
+// both anchor on the latest start. Its window runs to today(), but every logged day sits in
+// May 2026, so the Peak Day and "safe again" answers do not move as the clock does.
+// Cycle lengths are 30 and 30, so predict() gives nextStart = 2026-05-31.
+// ---------------------------------------------------------------------------
+export const may = (n) => `2026-05-${String(n).padStart(2, '0')}`;
+
+export function wetMostDays({ dryPatch = [12, 13, 14] } = {}) {
+  const days = {};
+  for (let n = 1; n <= 28; n++) days[may(n)] = { mucusSensation: 'wet' };
+  dryPatch.forEach((n) => { days[may(n)] = { mucusSensation: 'dry' }; });
+  [1, 2, 3, 4, 5].forEach((n) => { days[may(n)].flow = 'medium'; });
+  return {
+    days,
+    cycles: [
+      { id: 'w0', startDate: '2026-03-02' },
+      { id: 'w1', startDate: '2026-04-01' },
+      { id: 'w2', startDate: '2026-05-01', endDate: may(5) },
+    ],
+  };
+}
