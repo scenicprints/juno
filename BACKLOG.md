@@ -26,10 +26,22 @@ Pages, Firebase sync, no build step. The user considers the app **feature-comple
 - [ ] **Paper chart step 3: the mucus LETTER is not drawn.** The chart draws the symbol (○ ⊖ ⊕)
       but not the letter code beside it, which the CCL chart wants for sensation and
       characteristic. Cosmetic, finishes the step-by-step match. See §8 v0.9.6.
-- [ ] **Paper chart step 8: the LTL scan is not anchored near Peak Day.** `thermalShift()` takes the
-      FIRST qualifying rise in the cycle, independent of Peak Day; the sheet says to look close to
-      Peak Day. Phase 3 itself is fine (`stTemps()` does filter to post-Peak temps), so this only
-      skews the LTL line, and only on a messy series with an early false rise.
+- [ ] **Paper chart step 8: the rise is still not anchored near Peak Day.** Both `nfp.analyze()`
+      and `phases.js:thermalShift()` take the FIRST qualifying rise in the cycle; the sheet says to
+      look *close to Peak Day*. v0.9.9 fixed the dangerous consequence in the live path (a shift
+      that would close the window before it opens is now ignored) but NOT the cause. Two residues:
+      **(a)** with peak-quality mucus logged, an early artifact still shortens the window by 2-3
+      days; **(b)** `phases.js` is untouched, so the **chart** can still ring the Pre-Shift Six on
+      menstrual days and open Phase 3 early. Read-only, so it cannot move the banner, but she reads
+      that chart. The real fix is to require the rise to begin near Peak Day when mucus is charted.
+      **Do NOT "fix" this by excluding menstrual readings from the Pre-Shift Six** - that was tried
+      in v0.9.9, four tests went red, and they were right: the method counts them, and Doering
+      breaks without them. See ROADMAP v0.9.9.
+- [ ] **Product call, unanswered: may a confirmed shift close the window EARLIER than the
+      calendar?** Today it may, and that is the payoff for taking temperatures at all. ROADMAP
+      v0.7.2 claims "signs can only make it safer, never less safe", which was only ever true of
+      the mucus branch - the temperature branch always superseded. Making it a maximum would be
+      strictly safer and would remove most of the reason to temp. Needs a decision, not a guess.
 
 ## Open — notifications
 - [ ] **The `*/15` cron does not run every 15 minutes.** Measured 2026-10-20: ~5 runs/day, hours

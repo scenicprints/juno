@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.8';
+export const APP_VERSION = '0.9.9';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -355,8 +355,11 @@ function viewToday() {
     wrap.appendChild(banner);
 
     // temperature-confirmed ovulation note
+    // Only claim ovulation is confirmed when the window actually ACCEPTED the shift. One that
+    // would have closed the window before it opened is an artifact, ignored by
+    // effectiveWindow(); saying "confirmed" anyway would contradict the banner right above.
     const tc = c.tempConfirm;
-    if (tc && today() >= tc.infertileFrom) {
+    if (tc && c.eff && c.eff.tempConfirmed && today() >= tc.infertileFrom) {
       wrap.appendChild(el('p', { class: 'confirm-note',
         text: `✓ Ovulation confirmed by temperature (${prettyDate(tc.ovulation)}). The fertile window has closed for this cycle.` }));
     }

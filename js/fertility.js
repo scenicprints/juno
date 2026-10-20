@@ -62,18 +62,33 @@ export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
   const mp = mucusPeak(cycles, days);
   let fertileStart = base.fertileStart;
   let safeAgain = fmt(addDays(base.fertileEnd, 1)); // calendar baseline
+  let tempAccepted = false;
   if (mode === 'avoid') {
     const fm = firstMucusDay(cycles, days);
     if (fm && fm < fertileStart) fertileStart = fm;
     // A CONFIRMED thermal shift is evidence that ovulation has passed, so it supersedes the
     // calendar's guess for when the window closes — that's the payoff for taking temps.
-    if (tc) safeAgain = tc.infertileFrom;
+    //
+    // ONLY IF IT IS COHERENT. A shift that would close the window before it has even opened
+    // is not evidence of ovulation, it is an artifact. Waking temperatures are genuinely low
+    // during a period, so "six lows then three higher" is satisfiable almost anywhere early
+    // in a cycle, and two or three bad nights read as a textbook rise sitting on top of the
+    // menstrual lows. analyze() confirms it and this line used to ASSIGN, so the window
+    // closed before it opened: measured 2026-10-20, ten days including predicted ovulation
+    // flipped from "not safe" to "lower risk" — the whole fertile window erased.
+    //
+    // When the shift lands before the window opens, ignore it and let the calendar close the
+    // window. Refusing a shift is always the conservative direction. See ROADMAP §8 v0.9.9.
+    if (tc && tc.infertileFrom > fertileStart) { safeAgain = tc.infertileFrom; tempAccepted = true; }
     // Mucus is the cross-check: it can only push "safe again" LATER, never earlier.
     if (mp && mp.infertileFrom > safeAgain) safeAgain = mp.infertileFrom;
   } else if (tc && tc.infertileFrom > safeAgain) {
     safeAgain = tc.infertileFrom;
+    tempAccepted = true;
   }
-  return { ...base, fertileStart, safeAgain, tempConfirmed: !!tc, mucusPeakDate: mp ? mp.peakDate : null };
+  // tempConfirmed reports whether the shift was ACCEPTED, not merely detected — the Today
+  // card reads it, and saying "ovulation confirmed" under a "not safe" banner is a lie.
+  return { ...base, fertileStart, safeAgain, tempConfirmed: tempAccepted, mucusPeakDate: mp ? mp.peakDate : null };
 }
 
 // Classify a single date string for calendar shading + the Today banner.

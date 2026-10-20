@@ -51,13 +51,26 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 
 ## 4. Current status
 **TESTS — the repo has a committed test suite as of 2026-10-20.** `node --test` from the repo
-root runs **70 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
+root runs **73 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
 dependencies and no build step (`node:test` + `node:assert` + a small DOM shim). It is wired to CI
 in `.github/workflows/tests.yml`. **Every "N-test suite" figure in the entries below was a
 SCRATCH-ONLY harness that was thrown away** — they are corrected in place now. See §8 "Tests".
-The shipped app is **v0.9.8**. Note v0.9.7 never had a shell version of its own: it was a
+The shipped app is **v0.9.9**. Note v0.9.7 never had a shell version of its own: it was a
 notifier and documentation batch that touched no `js/` file, so there was nothing for the phones
 to re-download and no `APP_VERSION` bump. The app therefore went 0.9.6 → 0.9.8.
+
+**v0.9.9 (2026-10-20)** — **a false SAFE in the LIVE safety path, found and fixed.** Two or three
+bad nights early in a cycle (poor sleep, a drink, a reading taken late) produce a textbook-looking
+three-day rise sitting on top of the six **menstrual** lows — waking temperature is genuinely low
+during a period, so "six lows then three higher" is satisfiable almost anywhere early on.
+`nfp.analyze()` confirmed it as a thermal shift, and `effectiveWindow()` **assigned** that date to
+`safeAgain` instead of taking a maximum, so the fertile window closed the day **before it opened**.
+Measured with no mucus logged: **ten days, predicted ovulation among them, flipped from "not safe"
+to "lower risk".** Logging "moist" helped not at all (only peak-quality mucus moves the backstop);
+her habitual wet-logging masked all but 2–3 days. The fix is a coherence guard — a shift that would
+close the window before it opens is an artifact, not evidence, so it is ignored and the calendar
+closes the window instead. A genuine mid-cycle shift still closes the window early, which is the
+entire payoff for taking temperatures. See §8 v0.9.9.
 
 **v0.9.8 (2026-10-20)** — settled the `nfp.mucusPeak()` / `phases.peakDay()` divergence that v0.9.6
 left open, and the answer was **do not unify them**. Measured first: porting v0.9.5's Peak Day lock
@@ -410,6 +423,53 @@ It is rewritten as the real open list.
 produced no signal anyone acted on, because nothing in the app changes when push stops — the app
 itself was fine the whole time. If you touch the notifier, run it with `-f test=true` and **read
 the log**, and when you delete files, run `git status` and look at what you are actually staging.
+
+### v0.9.9 — a shift that closes the window before it opens is an artifact  ✅ BUILT (2026-10-20)
+Found while chasing what looked like a cosmetic charting gap (paper-chart step 8, "close to Peak
+Day"). It was not cosmetic. It was a **false SAFE in the live path** — the Today banner, the
+calendar shading and the notifier's green light, not the read-only Phases tab.
+
+**The failure.** Waking temperature is genuinely low during a period, so the six readings at the
+start of a cycle are a *depressed* baseline and any two or three slightly-off mornings after them
+clear it by the required margin. `nfp.analyze()` scans from the start of the cycle and takes the
+FIRST qualifying rise, so it accepted the artifact. `effectiveWindow()` then did
+`if (tc) safeAgain = tc.infertileFrom;` — an **assignment**, not a maximum — and the window's close
+date jumped backwards past its own open date.
+
+| logging pattern | "safe again" | days flipped to SAFE |
+|---|---|---|
+| temperatures, no mucus | May 20 → May 8 | **10 — the whole window** |
+| temperatures + "moist" only | May 20 → May 8 | **10** |
+| temperatures + peak mucus | May 20 → May 16 | 3 |
+| temperatures + wet most days (her habit) | May 20 → May 17 | 2 |
+
+Note the second row: logging *some* mucus bought nothing, because `mucusPeak()` reacts only to
+**peak-quality** mucus. And note that the backstop v0.9.8 refused to lock is the only reason rows 3
+and 4 are not rows 1 and 2 — locking it would have made this strictly worse.
+
+**The fix.** `effectiveWindow()` accepts a temperature close only when it lands **after** the
+window opens. Anything earlier is an artifact, so it is ignored and the calendar closes the window
+— always the conservative direction. `tempConfirmed` now reports whether the shift was ACCEPTED
+rather than merely detected, and the Today card's "✓ Ovulation confirmed by temperature" note reads
+that flag, because saying "confirmed" under a "Not safe" banner is a lie.
+
+**A genuine shift still closes the window early.** That is the payoff for temping, and it is
+asserted rather than assumed: a real rise on cycle day 15 still moves "safe again" May 20 → May 17.
+
+**The first attempt at this fix was WRONG, and the suite caught it.** It excluded bleeding days
+from the Pre-Shift Six, by analogy with v0.9.5's "you cannot read mucus through blood". Four tests
+went red and they were right: the method genuinely **does** count menstrual temperatures in the
+Pre-Shift Six — the Temperature-Only test says so in as many words ("the rise starts on cycle day
+8, so the six lows before it are Jan 2-7"), and Doering needs them too. Excluding them also left
+fewer than six readings before any early rise, so legitimate shifts stopped confirming at all. If
+that approach tempts you again: it is not the method, and it breaks Doering.
+
+**Still open, deliberately** (see `BACKLOG.md`): the partial exposure (with peak mucus logged the
+window still shortens 2-3 days on this pattern); `phases.js:thermalShift()` has the same first-match
+scan so the **chart** can still ring the Pre-Shift Six on menstrual days; and whether a confirmed
+shift should be allowed to close the window earlier than the calendar at all is a product call that
+remains unanswered. §8 v0.7.2's claim that "signs can only make it safer, never less safe" was
+never true of the temperature branch, only the mucus one.
 
 ### v0.9.8 — why mucusPeak() and peakDay() must stay different  ✅ BUILT (2026-10-20)
 v0.9.6 flagged that `nfp.mucusPeak()` never got v0.9.5's Peak Day lock or bleeding exclusion, while

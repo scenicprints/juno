@@ -6,11 +6,12 @@
 // here going red is never a formatting problem.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { effectiveWindow } from '../js/fertility.js';
+import { effectiveWindow, classify } from '../js/fertility.js';
 import { predict } from '../js/predict.js';
 import { mucusPeak } from '../js/nfp.js';
 import { cycleWindows, analyzeCycle, peakDay } from '../js/phases.js';
-import { wetMostDays, may, addD } from './helpers/fixtures.mjs';
+import { wetMostDays, may, addD, tempCycle, FALSE_RISE_TEMPS, GENUINE_RISE_TEMPS }
+  from './helpers/fixtures.mjs';
 
 const effFor = (cycles, days) => effectiveWindow(cycles, days, predict(cycles, {}), 'avoid');
 
@@ -77,4 +78,54 @@ test('the Phases tab and the Temperature card quote the SAME Peak Day', () => {
   const fromTempCard = peakDay(wins[wins.length - 1], days);
   assert.equal(fromPhasesTab.date, fromTempCard.date);
   assert.equal(fromPhasesTab.date, may(11));
+});
+
+// ---------------------------------------------------------------------------
+// v0.9.9 — a thermal shift that would close the window before it opens is an artifact
+// ---------------------------------------------------------------------------
+
+const flippedToSafe = (cycles, base, eff) => {
+  const prediction = predict(cycles, {});
+  let n = 0;
+  for (let i = 1; i <= 30; i++) {
+    const d = may(i);
+    if (classify(d, { cycles, prediction, eff: base, mode: 'avoid' }) === 'cannot'
+     && classify(d, { cycles, prediction, eff, mode: 'avoid' }) !== 'cannot') n++;
+  }
+  return n;
+};
+
+test('REGRESSION — bad nights early must not erase the fertile window', () => {
+  // Before v0.9.9 this set "safe again" to 2026-05-09, the day BEFORE the window opened, and
+  // ten days including predicted ovulation read "lower risk" instead of "not safe".
+  const { cycles, days } = tempCycle(FALSE_RISE_TEMPS);
+  const eff = effFor(cycles, days);
+  const base = effFor(cycles, {});
+  assert.equal(eff.tempConfirmed, false, 'the artifact shift was accepted as real');
+  assert.equal(eff.safeAgain, base.safeAgain, 'an artifact moved the close date');
+  const n = flippedToSafe(cycles, base, eff);
+  assert.equal(n, 0, `${n} not-safe day(s) flipped to safe`);
+});
+
+test('the fertile window can never close before it opens', () => {
+  for (const temps of [FALSE_RISE_TEMPS, GENUINE_RISE_TEMPS]) {
+    const { cycles, days } = tempCycle(temps);
+    const eff = effFor(cycles, days);
+    assert.ok(eff.safeAgain > eff.fertileStart,
+      `window opens ${eff.fertileStart} but closes ${eff.safeAgain}`);
+  }
+});
+
+test('a genuine shift STILL closes the window early — the guard refuses artifacts, not evidence', () => {
+  // The payoff for taking temperatures at all. If this goes red the v0.9.9 coherence guard has
+  // been made too strict and temping has stopped buying anything. (An earlier attempt at this
+  // fix excluded menstrual readings from the Pre-Shift Six; the suite caught it, because the
+  // method genuinely does count them — see the Temperature-Only and Doering tests.)
+  const { cycles, days } = tempCycle(GENUINE_RISE_TEMPS);
+  const eff = effFor(cycles, days);
+  const base = effFor(cycles, {});
+  assert.equal(eff.tempConfirmed, true);
+  assert.equal(eff.safeAgain, may(17));
+  assert.ok(eff.safeAgain < base.safeAgain,
+    `temperature did not close the window early: ${eff.safeAgain} vs calendar ${base.safeAgain}`);
 });

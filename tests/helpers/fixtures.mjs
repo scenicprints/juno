@@ -149,3 +149,39 @@ export function wetMostDays({ dryPatch = [12, 13, 14] } = {}) {
     ],
   };
 }
+
+// ---------------------------------------------------------------------------
+// Two or three bad nights early in a cycle — poor sleep, a drink, a reading taken late. Waking
+// temperatures are genuinely low during a period, so the bump reads as a textbook three-day
+// rise sitting on top of the six menstrual lows, and nfp.analyze() confirms a thermal shift
+// that never happened. Before v0.9.9 effectiveWindow() ASSIGNED that date, so the fertile
+// window closed the day before it opened and the whole thing vanished.
+//
+// Both fixtures run 2026-05-01 with 30-day history, so predict() gives nextStart 2026-05-31,
+// ovulation 2026-05-17, and an Avoid-mode window of 2026-05-10 closing 2026-05-20.
+// ---------------------------------------------------------------------------
+export const FALSE_RISE_TEMPS = {
+  1: 97.00, 2: 97.05, 3: 97.00, 4: 97.05, 5: 97.00, 6: 97.00,
+  7: 97.50, 8: 97.55, 9: 97.52,                           // the bad nights
+  10: 97.25, 11: 97.30, 12: 97.20, 13: 97.25, 14: 97.30,  // and straight back down again
+};
+
+// A real post-ovulatory shift: the rise starts on cycle day 15 and stays up.
+export const GENUINE_RISE_TEMPS = {
+  1: 97.20, 2: 97.25, 3: 97.20, 4: 97.25, 5: 97.20, 6: 97.30, 7: 97.25,
+  8: 97.30, 9: 97.20, 10: 97.25, 11: 97.30, 12: 97.25, 13: 97.30, 14: 97.20,
+  15: 97.95, 16: 98.05, 17: 98.10, 18: 98.05, 19: 98.00,
+};
+
+export function tempCycle(temps) {
+  const days = {};
+  for (const n of Object.keys(temps)) days[may(n)] = { tempF: temps[n] };
+  return {
+    days,
+    cycles: [
+      { id: 't0', startDate: '2026-03-02' },
+      { id: 't1', startDate: '2026-04-01' },
+      { id: 't2', startDate: '2026-05-01', endDate: may(5) },
+    ],
+  };
+}
