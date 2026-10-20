@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

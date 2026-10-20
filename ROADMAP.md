@@ -50,6 +50,15 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**TESTS — the repo has a committed test suite as of 2026-10-20.** `node --test` from the repo
+root runs **65 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
+dependencies and no build step (`node:test` + `node:assert` + a small DOM shim). It is wired to CI
+in `.github/workflows/tests.yml`. **Every "N-test suite" figure in the entries below was a
+SCRATCH-ONLY harness that was thrown away** — they are corrected in place now. See §8 "Tests".
+**No app code changed in this batch** — no `APP_VERSION` or service-worker bump and nothing for
+the phones to re-download. (The shipped app is still **v0.9.6**: v0.9.7 below was a notifier and
+documentation batch and did not touch `js/` either.)
+
 **v0.9.7 (2026-10-20)** — **the three-month push-notification outage is over.** The notifier had
 been dead since 2026-07-20 and nobody noticed: `scripts/notify/package.json` was deleted as
 collateral damage in `5fb79b3` (v0.7.9, a commit whose message is entirely about period logging),
@@ -78,8 +87,9 @@ log dragged Peak Day to the end of the cycle. The ST Rule then waited on drying 
 temperatures that were never coming, so Phase 3 never opened — which is also why cycles were
 missing a complete Phase 1/2/3. **(2) A period reads as peak mucus:** `wet` is a peak-quality
 sensation and bleeding is wet, so a period day registered as the most fertile mucus of the cycle
-and put Peak Day on day 1. Both fixed; 9 new regression tests, all 8 of the relevant ones verified
-failing against v0.9.4 first. Suite now 40.
+and put Peak Day on day 1. Both fixed; the 9 regression tests written then were
+scratch-only and were lost. Both bugs are now covered by committed tests
+(`tests/regressions-v0.9.5.test.mjs`), re-verified failing against the reverted fix.
 
 **v0.9.4 (2026-09-09)** — the fit-to-width math broke down on long cycles, which is where his real
 data lives. v0.9.3 clamped the rotated label font at a 5.5 floor, so below ~5.6 units per day the
@@ -251,6 +261,77 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
 
+### Tests — the first committed test suite  ✅ BUILT (2026-10-20)
+There had never been a committed test in this repo. `git log --all --diff-filter=A` returned zero
+test files, while §4 and §8 cited a "40-test suite" and "31 hand-checked assertions" — every one of
+those ran in a scratch dir and was thrown away with it. That is exactly how v0.9.5's two Peak Day
+bugs survived a green suite, and the lesson had already been written down twice (v0.9.4, v0.9.5)
+without being acted on.
+
+**Run it:** `node --test` from the repo root (or `npm test`). 65 tests, about half a second, no
+install step. CI: `.github/workflows/tests.yml`, on push and PR, kept separate from `notify.yml`
+because that one needs a secret and an `npm install` and this one must stay a clean signal.
+
+**What made it possible:** a root `package.json` with `{ "private": true, "type": "module" }`, so
+Node will load `js/*.js` as ES modules. It adds **no dependency and no build step** — §3 still
+holds, any Claude account can still edit a file and push with zero toolchain. GitHub Pages ignores
+it (Jekyll excludes `package.json` by default, and `sw.js`'s `SHELL` list is explicit), and the live
+site was re-checked after the push.
+
+**Files:**
+- `tests/phases-rules.test.mjs` — the CCL rules: Pre-Shift Six/LTL/HTL, Day 5/6 with and without a
+  short cycle in history, Doering gating (6 cycles of temperature history) and its minus-7
+  arithmetic, Peak Day including a peak returning during the drying days, Sympto-Thermal with a
+  strong and a weak 3rd temperature, Temperature-Only, Mucus-Only, and an unconfirmed cycle
+  staying Phase 2.
+- `tests/regressions-v0.9.5.test.mjs` — Peak Day locks once three drying days complete (swept
+  across every later day of the cycle, not just one); a bleeding day is never peak mucus, by the
+  period end date AND by a logged `flow`, as an A/B on that one field.
+- `tests/regressions-v0.8.4.test.mjs` — the stray-start anchor, `fertilityClass` evaluating risk
+  before the predicted-period label, and the temperature noise guard.
+- `tests/chart.test.mjs` — mounts the real `js/ui.js` and asserts on the SVG string it builds.
+- `tests/chart-lengths.test.mjs` — the degenerate lengths: 26, 28, 31, 34, 39, 40, 45, 58, 74, 121
+  completed, plus 3, 9 and 15-day cycles in progress. No NaN, no `undefined`, no font under 6
+  units, plot never wider than the 284 available, and the guards pinned at their exact crossovers.
+- `tests/helpers/` — the DOM shim, the fixtures, and the push stub.
+
+**A suite that passes against the bug is worthless, so each fix was reverted and re-run.** All
+seven reverts are caught:
+
+| reverted | tests that fail |
+|---|---|
+| v0.9.5 Peak Day lock (`forEach`, last one wins) | 3 |
+| v0.9.5 `isBleeding()` → `false` | 4 |
+| v0.8.4 `cycleStarts()` → unvalidated `sortedStarts` | 4 |
+| v0.8.4 `fertilityClass` label-before-risk | 2 |
+| v0.8.4 noise guard (`if (unreliable) return res`) | 2 |
+| v0.9.4 label thinning (`step = 1`) + 5.5 font floor | 5 |
+| v0.9.6 step-9 density guard (`showPreNums = true`) | 6 |
+
+**Conventions and gotchas worth not rediscovering:**
+- **`js/push.js` is stubbed through a loader hook**, not by copying `js/` somewhere and editing the
+  copy — a copy drifts, and the point of the suite is that it runs against the shipped files.
+  `push.js` statically imports the Firebase messaging SDK over https, which Node cannot resolve, so
+  `tests/helpers/push-hook.mjs` (stdlib `node:module`, needs Node **20.6+**) redirects that one
+  specifier. Nothing else in `js/` is substituted.
+- **`ui.js` keeps the open tab and the selected cycle in module-level `view` state**, so a second
+  mount in the same process would inherit the first one's picker position. `mountPhases()` imports
+  `ui.js` under a cache-busting URL per mount to keep the tests order-independent.
+- **The cycle picker opens on the NEWEST cycle, which is the one still in progress** (its window
+  runs to `today()` and grows daily). Tests page back with the ‹ button to reach a completed one,
+  and every fixture date is fixed and in the past so nothing changes meaning as the clock moves.
+- **A 9-day *completed* cycle cannot exist.** Two starts 9 days apart are not a cycle: `cycleStarts`
+  drops the second as a stray (v0.8.4, `MIN_CYCLE_DAYS` 15). The only window shorter than 15 days
+  is a cycle in progress, so that is how the short lengths are tested. The old sweep "verified" a
+  9-day cycle that was really one 293-day open window.
+- **The chart's column count is floored at 6 days**, so a 3-day cycle draws 6 columns.
+- **`node --test tests/` does not work on Node 24** (it reads the path as a file). The command is
+  `node --test` from the repo root.
+- **What this suite cannot catch:** it asserts on the SVG *string*, with no layout and no CSS. It
+  catches a missing mark, a NaN coordinate, a label that should have been thinned. It cannot tell
+  you the chart *looks* right on a phone — that still needs a phone. And the UI interactions from
+  v0.8.4 (the two Today buttons, the start-guard toast) are not covered yet.
+
 ### v0.9.7 — push notifications work again (dead for three months)  ✅ BUILT (2026-10-20)
 `scripts/notify/package.json` was deleted in `5fb79b3` (v0.7.9) — a commit whose message is
 entirely about period logging, and which also deleted `CLAUDE.md`, `BACKLOG.md` and `README.md`.
@@ -350,13 +431,12 @@ shorter), so this is not a false-safe, but the Phases tab and the Today banner c
 about which day Peak Day was. Changing it moves the safety window — decide deliberately, re-read §2.
 
 **Verified** with a Node harness that mounts the real `ui.js` against a minimal DOM shim and reads
-the rendered SVG back out (the v0.8.4 approach): 12 assertions on the `phases.js` rules including an
-A/B proving the new `flow` field is what excludes a bleeding-day mucus log, 13 on the rendered chart
-including the step-9 numbers reading 6,5,4,3,2,1 left to right, and a sweep over 9, 26, 28, 31, 34,
-39, 40, 45, 58, 74 and 121-day cycles — all clean, no NaN, numbering guard correct at every length.
-**That harness is NOT in the repo.** Committing one needs a root `package.json` with
-`"type": "module"` so Node will load `js/*.js` as ES modules. It is worth doing: there has never
-been a committed test here, and the "40-test suite" §4 refers to was always scratch-only.
+the rendered SVG back out (the v0.8.4 approach): assertions on the `phases.js` rules including an
+A/B proving the new `flow` field is what excludes a bleeding-day mucus log, assertions on the
+rendered chart including the step-9 numbers reading 6,5,4,3,2,1 left to right, and a sweep over
+degenerate cycle lengths. **That harness was scratch-only and has since been rewritten as the
+committed suite** — see §8 "Tests". The A/B on `flow`, the step-9 numbering and the length sweep
+all survive in `tests/`.
 
 ### v0.9.5 — Peak Day locks, and a period is not peak mucus  ✅ BUILT (2026-09-09)
 He read the charts against his own data and found both of these. Neither was a display bug.
@@ -378,9 +458,11 @@ He read the charts against his own data and found both of these. Neither was a d
   ignoring a period-day mucus log can never push Phase 1 past those.
 - **Do not "fix" `nfp.js` by removing `wet` from `PEAK_SENSATIONS`.** Wet IS peak-quality mucus.
   The problem was never the sensation list, it was reading mucus through blood.
-- **The 31-test suite passed through both bugs.** Every case in it was a tidy textbook cycle with
-  no late mucus patch and no mucus logged during the period. Test the messy shapes real logging
-  produces, not the ones the rules are illustrated with.
+- **The 31-assertion scratch harness passed through both bugs.** Every case in it was a tidy
+  textbook cycle with no late mucus patch and no mucus logged during the period. Test the messy
+  shapes real logging produces, not the ones the rules are illustrated with. (That harness was
+  never committed and no longer exists; both bugs are pinned now in
+  `tests/regressions-v0.9.5.test.mjs`.)
 
 ### v0.9.4 — thin the labels, and make a stale cached app recoverable  ✅ BUILT (2026-09-09)
 "I cannot scroll through to see an entire cycle." Third attempt at this.
@@ -482,9 +564,11 @@ with LTL/HTL lines and the Pre-Shift Six ringed, the mucus symbol row (○ ⊖ �
 with the drying days numbered 1 2 3, the two vertical phase lines, and a today marker. Wider than
 the phone on purpose — it scrolls inside `.phase-scroll`.
 
-31 hand-checked assertions cover the rules (Pre-Shift Six/LTL/HTL, Day 5/6 with and without a short
-cycle, Doering gating and arithmetic, Peak Day incl. a returning peak, ST with a strong and a weak
-3rd temp, Temperature-Only, Mucus-Only, and unconfirmed staying Phase 2).
+31 hand-checked assertions covered the rules at the time (Pre-Shift Six/LTL/HTL, Day 5/6 with and
+without a short cycle, Doering gating and arithmetic, Peak Day incl. a returning peak, ST with a
+strong and a weak 3rd temp, Temperature-Only, Mucus-Only, and unconfirmed staying Phase 2) — but
+they were run in a scratch dir and thrown away, which is how v0.9.5's two bugs stayed hidden. All
+of that ground is now covered by committed tests in `tests/phases-rules.test.mjs`.
 
 ### v0.8.4 — the "safe/not-safe flipped when we ended her period" bug  ✅ BUILT (2026-08-17)
 Diagnosed from the real export (Settings → Download my data — always ask for it first; it's the ground
@@ -525,7 +609,10 @@ Aug 28–Sep 1 flipped to "not safe" (exactly his report). Fixes:
   bump (`juno-v0.8.4`).
 - **Verified** with a Node replay of the real pure modules against his export (fake `today()`), and
   a browser harness that mounts `ui.js` with in-memory handlers: end-then-tap creates no entry, guard
-  toasts, banner "Not safe" on both false-safe repros, ring arcs contiguous.
+  toasts, banner "Not safe" on both false-safe repros, ring arcs contiguous. Both were scratch-only.
+  The three logic fixes (stray anchor, risk-before-label, temperature noise) are now committed as
+  `tests/regressions-v0.8.4.test.mjs`; the UI-interaction parts (the two Today buttons, the guard
+  toast) are still uncovered — they need the day sheet and toasts, not just the chart.
 
 ### v0.7.5–0.7.8 — PWA polish + data export  ✅ BUILT
 - v0.7.5: Android **Back** closes the day sheet / notifications sub-screen (history trap) instead of
@@ -626,4 +713,8 @@ Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action 
 - **Firebase for sync** — no server to run; public config is safe; Firestore rules enforce privacy.
 - **Avoid mode default + conservative shading** — the stated main purpose is avoiding pregnancy.
 - **Mood logging is in v0.1** (not later) — mood *prediction* needs history recorded from day one.
+- **Tests are committed, and dependency-free** — `node:test` + `node:assert` only, run with
+  `node --test`. A root `package.json` (`type: module`) is what lets Node import `js/*.js`; it adds
+  no dependency and no build step, so §3 is intact. Scratch-dir harnesses are not tests: three
+  separate ones were written, cited in this file as if they were a suite, and thrown away.
 - **Roadmap-as-law** — the "live online / switch Claude accounts" requirement; the repo is the memory.

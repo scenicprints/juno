@@ -1,0 +1,26 @@
+name: Juno tests
+
+# Runs the test suite (tests/*.test.mjs) on every push and pull request.
+#
+# Deliberately separate from notify.yml: that one is a scheduled sender that needs a secret and
+# an npm install, this one needs neither and must stay green as a plain signal about the code.
+#
+# There are no dependencies to install. The suite uses node:test and node:assert only, which is
+# the whole point — the repo has no build step and no toolchain (ROADMAP §3), and the test suite
+# was not allowed to introduce one.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run the suite
+        run: node --test
