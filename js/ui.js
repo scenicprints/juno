@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.9';
+export const APP_VERSION = '0.9.10';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [

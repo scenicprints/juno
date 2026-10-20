@@ -62,10 +62,16 @@ export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
   const mp = mucusPeak(cycles, days);
   let fertileStart = base.fertileStart;
   let safeAgain = fmt(addDays(base.fertileEnd, 1)); // calendar baseline
-  let tempAccepted = false;
   if (mode === 'avoid') {
     const fm = firstMucusDay(cycles, days);
     if (fm && fm < fertileStart) fertileStart = fm;
+  }
+  // Is the shift CREDIBLE? A rise that lands before the window has even opened is an
+  // artifact in any mode (see below). Decided once, here, so "credible" never depends on
+  // whether the date happened to move — in conceive mode a real shift usually does not move
+  // anything, and reporting it as unconfirmed hid "you ovulated" in the mode that wants it most.
+  const tempAccepted = !!(tc && tc.infertileFrom > fertileStart);
+  if (mode === 'avoid') {
     // A CONFIRMED thermal shift is evidence that ovulation has passed, so it supersedes the
     // calendar's guess for when the window closes — that's the payoff for taking temps.
     //
@@ -79,12 +85,11 @@ export function effectiveWindow(cycles, days, prediction, mode = 'avoid') {
     //
     // When the shift lands before the window opens, ignore it and let the calendar close the
     // window. Refusing a shift is always the conservative direction. See ROADMAP §8 v0.9.9.
-    if (tc && tc.infertileFrom > fertileStart) { safeAgain = tc.infertileFrom; tempAccepted = true; }
+    if (tempAccepted) safeAgain = tc.infertileFrom;
     // Mucus is the cross-check: it can only push "safe again" LATER, never earlier.
     if (mp && mp.infertileFrom > safeAgain) safeAgain = mp.infertileFrom;
-  } else if (tc && tc.infertileFrom > safeAgain) {
+  } else if (tempAccepted && tc.infertileFrom > safeAgain) {
     safeAgain = tc.infertileFrom;
-    tempAccepted = true;
   }
   // tempConfirmed reports whether the shift was ACCEPTED, not merely detected — the Today
   // card reads it, and saying "ovulation confirmed" under a "not safe" banner is a lie.

@@ -129,3 +129,18 @@ test('a genuine shift STILL closes the window early — the guard refuses artifa
   assert.ok(eff.safeAgain < base.safeAgain,
     `temperature did not close the window early: ${eff.safeAgain} vs calendar ${base.safeAgain}`);
 });
+
+test('"ovulation confirmed" means CREDIBLE, in every mode — not "the date moved"', () => {
+  // v0.9.9 first tied tempConfirmed to whether the close date actually moved. In conceive and
+  // neutral a real shift usually moves nothing, so the Today card stopped saying "ovulation
+  // confirmed by temperature" in the mode that wants that sentence most. Credibility is now
+  // decided once, before the mode branches.
+  const real = tempCycle(GENUINE_RISE_TEMPS);
+  const fake = tempCycle(FALSE_RISE_TEMPS);
+  for (const mode of ['avoid', 'conceive', 'neutral']) {
+    const good = effectiveWindow(real.cycles, real.days, predict(real.cycles, {}), mode);
+    const bad = effectiveWindow(fake.cycles, fake.days, predict(fake.cycles, {}), mode);
+    assert.equal(good.tempConfirmed, true, `a genuine shift reads unconfirmed in ${mode}`);
+    assert.equal(bad.tempConfirmed, false, `an artifact reads confirmed in ${mode}`);
+  }
+});

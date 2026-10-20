@@ -51,11 +51,11 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 
 ## 4. Current status
 **TESTS — the repo has a committed test suite as of 2026-10-20.** `node --test` from the repo
-root runs **73 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
+root runs **74 tests** over the safety-critical pure modules *and* the rendered chart, with no npm
 dependencies and no build step (`node:test` + `node:assert` + a small DOM shim). It is wired to CI
 in `.github/workflows/tests.yml`. **Every "N-test suite" figure in the entries below was a
 SCRATCH-ONLY harness that was thrown away** — they are corrected in place now. See §8 "Tests".
-The shipped app is **v0.9.9**. Note v0.9.7 never had a shell version of its own: it was a
+The shipped app is **v0.9.10**. Note v0.9.7 never had a shell version of its own: it was a
 notifier and documentation batch that touched no `js/` file, so there was nothing for the phones
 to re-download and no `APP_VERSION` bump. The app therefore went 0.9.6 → 0.9.8.
 
@@ -455,6 +455,13 @@ that flag, because saying "confirmed" under a "Not safe" banner is a lie.
 
 **A genuine shift still closes the window early.** That is the payoff for temping, and it is
 asserted rather than assumed: a real rise on cycle day 15 still moves "safe again" May 20 → May 17.
+
+**v0.9.10 — follow-up fix to this batch.** The first cut tied `tempConfirmed` to whether the close
+date actually MOVED. In conceive and neutral a real shift usually moves nothing, so the Today
+card stopped saying "✓ Ovulation confirmed by temperature" in the mode that wants that sentence
+most. Credibility is now decided once, before the mode branches: a shift is credible when it lands
+after the window opens, full stop. Asserted for all three modes against both a genuine rise and
+the artifact.
 
 **The first attempt at this fix was WRONG, and the suite caught it.** It excluded bleeding days
 from the Pre-Shift Six, by analogy with v0.9.5's "you cannot read mucus through blood". Four tests
