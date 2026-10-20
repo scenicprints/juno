@@ -50,13 +50,6 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
-**v0.9.6 (2026-10-20)** — audited the Phases tab against the CCL "15 Steps of Paper Charting at a
-Glance" sheet. Steps 4–8, 10, 11, 13 and 14 already matched exactly. Closed the three that did not:
-**menstrual flow is now recordable** (step 1 — which also makes `isBleeding()`'s `days.flow` branch
-live for the first time), the **Pre-Shift Six are numbered right to left** (step 9), and the
-**confirming temperatures are circled** (step 12). See §8 v0.9.6, including the deliberate step-5
-divergence and the `nfp.mucusPeak()` gap that is still open.
-
 **v0.9.7 (2026-10-20)** — **the three-month push-notification outage is over.** The notifier had
 been dead since 2026-07-20 and nobody noticed: `scripts/notify/package.json` was deleted as
 collateral damage in `5fb79b3` (v0.7.9, a commit whose message is entirely about period logging),
@@ -69,6 +62,14 @@ push went to a real phone.** Two things are now true and were not before: the `*
 fiction (it really runs ~5x a day, which breaks the temperature reminder specifically), and **only
 one of the two phones is still registered** — the second device's token was stale and the notifier
 auto-pruned it, so that phone has to re-enable. Both written up in §8 v0.9.7 and `BACKLOG.md`.
+
+**v0.9.6 (2026-10-20)** — audited the Phases tab against the CCL "15 Steps of Paper Charting at a
+Glance" sheet. Steps 4–8, 10, 11, 13 and 14 already matched exactly. Closed the three that did not:
+**menstrual flow is now recordable** (step 1 — which also makes `isBleeding()`'s `days.flow` branch
+live for the first time), the **Pre-Shift Six are numbered right to left** (step 9), and the
+**confirming temperatures are circled** (step 12). See §8 v0.9.6, including the deliberate step-5
+divergence and the `nfp.mucusPeak()` gap that is still open.
+
 
 **v0.9.5 (2026-09-09)** — two real correctness bugs in `peakDay()`, both spotted by him on his own
 data ("why in aug 10 to sep 4 is sep 3rd the peak day"). **(1) Peak Day never locked:** the scan
@@ -118,8 +119,10 @@ effective window, and noisy temperatures can no longer confirm ovulation. See §
 
 **v0.7.0 — adds a Notifications-preferences screen, a daily temperature reminder, and an NFP
 temperature chart (coverline/shift/ovulation/infertile phase) on its own Today card.** Also v0.6.3
-fixed the "no active Service Worker" enable bug + actionable permission errors. Notifier now runs every
-15 min (per-type toggles, timezone-aware temp reminder, once-daily de-duped digest). Below is the prior
+fixed the "no active Service Worker" enable bug + actionable permission errors. Notifier is *scheduled*
+every 15 min (per-type toggles, timezone-aware temp reminder, once-daily de-duped digest) — but
+see v0.9.7: GitHub actually runs it about **5 times a day**, which the digest tolerates and the
+temperature reminder does not. Below is the prior
 status line (still accurate for the core):
 
 **v0.6.1 — everything built, incl. real push notifications (setup complete, verified at the time
