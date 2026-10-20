@@ -35,9 +35,11 @@ Pages, Firebase sync, no build step. The user considers the app **feature-comple
       the honest fix is a product call: widening the window means a "take your temperature right
       after waking" push can arrive at 2pm, which is worse than silence. Options: widen to ~90 min
       and accept late-but-plausible; drop the feature; or move the notifier off GitHub cron.
-- [ ] **One of the two registered devices has a dead token** (test send was 1/2 on 2026-10-20).
-      The notifier prunes it automatically; that phone must re-enable under Settings →
+- [ ] **Only one phone is registered for push.** There were two; on 2026-10-20 the second one's
+      token was stale (test send `1/2`), the notifier auto-pruned it, and the next run was a clean
+      `1/1`. Whichever phone stopped getting notifications has to re-enable under Settings →
       Notifications → Turn on notifications (iPhone must be installed to the Home Screen first).
+      Nothing in the app surfaces "this device is no longer registered", which is worth fixing.
 
 ## Open — small / later
 - [ ] Use temperatures to **narrow the next-period prediction** (today they only gate the

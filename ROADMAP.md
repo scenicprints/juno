@@ -64,11 +64,11 @@ which also took `CLAUDE.md`, `BACKLOG.md` and `README.md`. `notify.yml` runs `np
 `working-directory: scripts/notify`, so every run since died with `ENOENT ... package.json`,
 exit 254, **before node ever started** — 100 of the last 100 runs failed and not one notification
 was delivered in three months. The file is restored, the workflow is **green again**, and a
-`test=true` run reports `users found: 1`, `2 registered device token(s)`, send `1/2`.
-**Two things are now true and were not before:** the `*/15` cron is a fiction (it really runs ~5x
-a day, which breaks the temperature reminder specifically), and one of the two devices has a dead
-token. Both are written up in §8 v0.9.7 and `BACKLOG.md`. Push is **working but only half-proven**
-— see §8 v0.9.7 before claiming otherwise.
+`test=true` run reports `users found: 1` and a clean **`1/1`** send — **delivery is proven, a real
+push went to a real phone.** Two things are now true and were not before: the `*/15` cron is a
+fiction (it really runs ~5x a day, which breaks the temperature reminder specifically), and **only
+one of the two phones is still registered** — the second device's token was stale and the notifier
+auto-pruned it, so that phone has to re-enable. Both written up in §8 v0.9.7 and `BACKLOG.md`.
 
 **v0.9.5 (2026-09-09)** — two real correctness bugs in `peakDay()`, both spotted by him on his own
 data ("why in aug 10 to sep 4 is sep 3rd the peak day"). **(1) Peak Day never locked:** the scan
@@ -263,8 +263,10 @@ on exited `ENOENT ... scripts/notify/package.json`, **exit 254, before node ever
   warning), so it is **deliberately left unbumped** — nothing here needed a version bump.
 - **`node_modules/` added to `.gitignore`.** It was never there. Any `npm install` inside the repo
   would have committed the whole dependency tree.
-- **Verified green:** `gh workflow run notify.yml -R scenicprints/juno -f test=true` →
-  `users found: 1` · `user <uid>: 2 registered device token(s)` · send **`1/2`**.
+- **Verified green, and delivery proven.** `gh workflow run notify.yml -R scenicprints/juno
+  -f test=true` → `users found: 1` · `2 registered device token(s)` · send `1/2`. The dead token
+  was auto-pruned, and a second run returned `1 registered device token(s)` · send **`1/1`** ·
+  `done — 1 notification(s) sent.` A real push reached a real phone — this is not inferred.
 
 **⚠️ The `*/15` cron is a fiction — it runs about 5 times a day.** Measured over the last 100 runs:
 3–8 runs per day, hours apart, not the 96 the cron asks for. GitHub drops the overwhelming majority
@@ -279,10 +281,13 @@ of scheduled runs on a free public repo. Consequences, which differ per trigger:
   not a bug fix. Options in `BACKLOG.md`: widen to ~90 min and accept late-but-plausible, drop the
   feature, or move the notifier off GitHub cron. **Do not quietly widen it — ask first.**
 
-**One of the two registered devices is dead.** The test send was `1/2`. `send()` already pruned
-dead tokens but **logged nothing about which device failed or why** — `1/2` reads as success at a
-glance. It now logs the per-device FCM error code and says when it prunes. Tokens themselves are
-never logged (Actions logs are public). That phone must re-enable under Settings → Notifications.
+**One of the two registered devices was dead, and is now gone.** The first test send was `1/2`;
+`send()` pruned the stale token, and the next run was `1/1` against the one remaining device.
+So **one phone is live and one is unregistered** — whichever phone stopped getting pushes has to
+re-enable under Settings → Notifications (iPhone must be installed to the Home Screen first).
+`send()` had pruned dead tokens all along but **logged nothing about which device failed or why**,
+so `1/2` read as success at a glance. It now logs the per-device FCM error code and says when it
+prunes. Tokens themselves are never logged — Actions logs are public.
 
 **`CLAUDE.md` and `README.md` restored; `BACKLOG.md` rewritten, not restored.** §0 tells every
 incoming agent to read `CLAUDE.md` and `BACKLOG.md` and both had been missing for three months.
@@ -576,16 +581,18 @@ Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action 
   wording. Mapping: fertile window = CAN'T; before/after = CAN.)
 - **SETUP DONE:** ✅ VAPID key is in `js/push.js` (`pushConfigured()` true). ✅ GitHub secret
   `FIREBASE_SERVICE_ACCOUNT` is set. ✅ Sender pipeline verified — but **this "verified" was true in
-  v0.6 and then false for three months**, see §8 v0.9.7. Re-verified green 2026-10-20 with
-  `users found: 1`, `2 registered device token(s)`, test send `1/2` (one dead token, auto-pruned).
+  v0.6 and then false for three months**, see §8 v0.9.7. Re-verified green 2026-10-20:
+  `users found: 1`, first run `2 registered device token(s)` / send `1/2`, the dead token
+  auto-pruned, second run `1 registered device token(s)` / send **`1/1`**.
   **A green `notify.yml` run is not proof of delivery** — read the log's `users found:` and
   `registered device token(s)` lines, and note that `1/2` is a partial failure, not a success.
 - **Console note:** the redesigned Firebase console has NO "Cloud Messaging" tab under Settings. Reach
   Web Push certs by direct URL: `console.firebase.google.com/project/juno-a6adc/settings/cloudmessaging`.
 - **REMAINING to see a notification land:** enable it on a phone (Settings → Turn on notifications;
   iPhone must be installed to Home Screen first) → that stores a token → then delivery works.
-  As of 2026-10-20 two tokens are registered but **only one is live**; the other phone has to
-  re-enable. The notifier prunes dead tokens itself and now logs the per-device failure reason.
+  As of 2026-10-20 **only one phone is registered** — there were two, the second one's token was
+  stale and the notifier pruned it, so that phone has to re-enable. The notifier prunes dead
+  tokens itself and now logs the per-device failure reason.
 - **Test delivery on demand:** `notify.yml` has a `workflow_dispatch` input `test` — run with test=true
   (`gh workflow run notify.yml -R scenicprints/juno -f test=true`) to push a one-off "it works" to all
   registered devices without waiting for a real trigger day.
