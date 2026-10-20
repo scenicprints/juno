@@ -66,9 +66,14 @@ async function send(uid, tokens, body, sentKey, localDate) {
   console.log(`user ${uid}: [${sentKey || 'test'}] "${body}" → ${res.successCount}/${tokens.length}`);
   const dead = [];
   res.responses.forEach((r, i) => {
-    const code = r.error && r.error.code;
-    if (!r.success && (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-argument')) dead.push(tokens[i]);
+    if (r.success) return;
+    // A partial send used to be invisible: "1/2" in the log looked like success. Say which
+    // device failed and why. (Never log the token itself — Actions logs are public.)
+    const code = (r.error && r.error.code) || 'unknown';
+    console.log(`  device ${i + 1}/${tokens.length} failed: ${code}`);
+    if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-argument') dead.push(tokens[i]);
   });
+  if (dead.length) console.log(`  pruning ${dead.length} dead token(s) — that device must re-enable notifications in Settings > Notifications.`);
   const update = {};
   if (sentKey) update.sent = { [sentKey]: localDate };
   if (dead.length) update.tokens = admin.firestore.FieldValue.arrayRemove(...dead);

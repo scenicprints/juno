@@ -57,17 +57,18 @@ live for the first time), the **Pre-Shift Six are numbered right to left** (step
 **confirming temperatures are circled** (step 12). See §8 v0.9.6, including the deliberate step-5
 divergence and the `nfp.mucusPeak()` gap that is still open.
 
-**⚠️ PUSH NOTIFICATIONS ARE DEAD, and have been since 2026-07-20.** Everything below that calls push
-"BUILT / verified" is stale — do not trust it. `scripts/notify/package.json` was deleted as
-collateral damage in `5fb79b3` (v0.7.9, a commit about period logging), along with `CLAUDE.md`,
-`BACKLOG.md` and `README.md`. `notify.yml` runs `npm install` in `scripts/notify`, which now exits
-`ENOENT ... package.json`, so **every scheduled run since has failed** — 100 of the last 100,
-about 96 failures a day, no notification delivered in three months. The only green runs in the
-history are `pages-build-deployment`, not the notifier. Restore with
-`git show ee60302:scripts/notify/package.json > scripts/notify/package.json` (it is only
-`"type": "module"` + `firebase-admin ^12.7.0`), then check
-`gh run list -R scenicprints/juno -w "Juno notifications"`. Note §0 still tells every incoming
-agent to read `CLAUDE.md` and `BACKLOG.md`; both were deleted in the same commit and never restored.
+**v0.9.7 (2026-10-20)** — **the three-month push-notification outage is over.** The notifier had
+been dead since 2026-07-20 and nobody noticed: `scripts/notify/package.json` was deleted as
+collateral damage in `5fb79b3` (v0.7.9, a commit whose message is entirely about period logging),
+which also took `CLAUDE.md`, `BACKLOG.md` and `README.md`. `notify.yml` runs `npm install` with
+`working-directory: scripts/notify`, so every run since died with `ENOENT ... package.json`,
+exit 254, **before node ever started** — 100 of the last 100 runs failed and not one notification
+was delivered in three months. The file is restored, the workflow is **green again**, and a
+`test=true` run reports `users found: 1`, `2 registered device token(s)`, send `1/2`.
+**Two things are now true and were not before:** the `*/15` cron is a fiction (it really runs ~5x
+a day, which breaks the temperature reminder specifically), and one of the two devices has a dead
+token. Both are written up in §8 v0.9.7 and `BACKLOG.md`. Push is **working but only half-proven**
+— see §8 v0.9.7 before claiming otherwise.
 
 **v0.9.5 (2026-09-09)** — two real correctness bugs in `peakDay()`, both spotted by him on his own
 data ("why in aug 10 to sep 4 is sep 3rd the peak day"). **(1) Peak Day never locked:** the scan
@@ -121,7 +122,8 @@ fixed the "no active Service Worker" enable bug + actionable permission errors. 
 15 min (per-type toggles, timezone-aware temp reminder, once-daily de-duped digest). Below is the prior
 status line (still accurate for the core):
 
-**v0.6.1 — everything built, incl. real push notifications (setup complete, verified).** All three
+**v0.6.1 — everything built, incl. real push notifications (setup complete, verified at the time
+— but see v0.9.7 above: push was then dead from 2026-07-20 to 2026-10-20).** All three
 pillars + in-app reminders + Stats tab + phase ring + **FCM push (scheduled GitHub Action)**. VAPID key
 in, `FIREBASE_SERVICE_ACCOUNT` secret set, notifier run verified green. **Only remaining:** enable
 notifications on each phone (stores a token) → then delivery works; test on demand with `notify.yml`
@@ -245,6 +247,55 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.7 — push notifications work again (dead for three months)  ✅ BUILT (2026-10-20)
+`scripts/notify/package.json` was deleted in `5fb79b3` (v0.7.9) — a commit whose message is
+entirely about period logging, and which also deleted `CLAUDE.md`, `BACKLOG.md` and `README.md`.
+Nothing in the app or the repo referenced it, so nothing broke visibly. What broke was CI:
+`notify.yml` runs `npm install` with `working-directory: scripts/notify`, which from that commit
+on exited `ENOENT ... scripts/notify/package.json`, **exit 254, before node ever started**.
+
+- **100 of the last 100 runs failed.** From 2026-07-20 to 2026-10-20 not one notification was
+  delivered, and the only green runs in the Actions history were `pages-build-deployment`.
+- **Restored verbatim from `ee60302`.** `"type": "module"` is the load-bearing line — `index.js` is
+  ESM and would otherwise be parsed as CommonJS. `firebase-admin ^12.7.0` still resolves to 12.7.0
+  and installs clean on Node 20 (`engines: node >=14`, 167 packages, only a `uuid` deprecation
+  warning), so it is **deliberately left unbumped** — nothing here needed a version bump.
+- **`node_modules/` added to `.gitignore`.** It was never there. Any `npm install` inside the repo
+  would have committed the whole dependency tree.
+- **Verified green:** `gh workflow run notify.yml -R scenicprints/juno -f test=true` →
+  `users found: 1` · `user <uid>: 2 registered device token(s)` · send **`1/2`**.
+
+**⚠️ The `*/15` cron is a fiction — it runs about 5 times a day.** Measured over the last 100 runs:
+3–8 runs per day, hours apart, not the 96 the cron asks for. GitHub drops the overwhelming majority
+of scheduled runs on a free public repo. Consequences, which differ per trigger:
+- **The daily digest is fine.** It is gated to "at/after 8:00am local" and de-duped by local date,
+  so some run each day still catches it — it just arrives later than 8am, not at 8am.
+- **The temperature reminder is effectively broken.** It only fires inside a 20-minute window
+  (`REMINDER_WINDOW`) around the chosen time, and ~5 randomly-placed runs/day hit a given
+  20-minute window about **7% of the time** — roughly once a fortnight.
+- **Deliberately NOT changed here.** The obvious fix (widen the window) means a "take a temperature
+  right after waking" push can land at 2pm, which is worse than silence. That is a product call,
+  not a bug fix. Options in `BACKLOG.md`: widen to ~90 min and accept late-but-plausible, drop the
+  feature, or move the notifier off GitHub cron. **Do not quietly widen it — ask first.**
+
+**One of the two registered devices is dead.** The test send was `1/2`. `send()` already pruned
+dead tokens but **logged nothing about which device failed or why** — `1/2` reads as success at a
+glance. It now logs the per-device FCM error code and says when it prunes. Tokens themselves are
+never logged (Actions logs are public). That phone must re-enable under Settings → Notifications.
+
+**`CLAUDE.md` and `README.md` restored; `BACKLOG.md` rewritten, not restored.** §0 tells every
+incoming agent to read `CLAUDE.md` and `BACKLOG.md` and both had been missing for three months.
+`CLAUDE.md` and `README.md` were still accurate and went back nearly verbatim (`CLAUDE.md` gains
+one hard rule: don't delete a support file you aren't working on). **`BACKLOG.md` was not restored
+as-is on purpose** — the deleted version was written at v0.0 and still listed v0.1–v0.5 as upcoming
+work, so restoring it would have told the next agent to go build features that shipped a year ago.
+It is rewritten as the real open list.
+
+**The lesson worth keeping: a scheduled job that fails is silent.** Three months of daily failures
+produced no signal anyone acted on, because nothing in the app changes when push stops — the app
+itself was fine the whole time. If you touch the notifier, run it with `-f test=true` and **read
+the log**, and when you delete files, run `git status` and look at what you are actually staging.
 
 ### v0.9.6 — the paper chart's steps 1, 9 and 12  ✅ BUILT (2026-10-20)
 Checked the Phases tab line by line against the CCL "15 Steps of Paper Charting at a Glance" sheet.
@@ -524,12 +575,17 @@ Real OS push (user's 3 requested triggers), free, via a scheduled GitHub Action 
   starts (forecast, not on log). (Reworded v0.6.2 from "not-safe window opens/ends" — same logic, clearer
   wording. Mapping: fertile window = CAN'T; before/after = CAN.)
 - **SETUP DONE:** ✅ VAPID key is in `js/push.js` (`pushConfigured()` true). ✅ GitHub secret
-  `FIREBASE_SERVICE_ACCOUNT` is set. ✅ Sender pipeline verified — manual run of `notify.yml` succeeded
-  (`done — 0 notification(s) sent`, 0 only because no device tokens registered yet).
+  `FIREBASE_SERVICE_ACCOUNT` is set. ✅ Sender pipeline verified — but **this "verified" was true in
+  v0.6 and then false for three months**, see §8 v0.9.7. Re-verified green 2026-10-20 with
+  `users found: 1`, `2 registered device token(s)`, test send `1/2` (one dead token, auto-pruned).
+  **A green `notify.yml` run is not proof of delivery** — read the log's `users found:` and
+  `registered device token(s)` lines, and note that `1/2` is a partial failure, not a success.
 - **Console note:** the redesigned Firebase console has NO "Cloud Messaging" tab under Settings. Reach
   Web Push certs by direct URL: `console.firebase.google.com/project/juno-a6adc/settings/cloudmessaging`.
 - **REMAINING to see a notification land:** enable it on a phone (Settings → Turn on notifications;
   iPhone must be installed to Home Screen first) → that stores a token → then delivery works.
+  As of 2026-10-20 two tokens are registered but **only one is live**; the other phone has to
+  re-enable. The notifier prunes dead tokens itself and now logs the per-device failure reason.
 - **Test delivery on demand:** `notify.yml` has a `workflow_dispatch` input `test` — run with test=true
   (`gh workflow run notify.yml -R scenicprints/juno -f test=true`) to push a one-off "it works" to all
   registered devices without waiting for a real trigger day.
