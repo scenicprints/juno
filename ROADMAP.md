@@ -50,6 +50,25 @@ This is **her first tracker** — keep onboarding gentle and predictions honest 
 - Personal logs live in **Firestore**, locked to their two accounts. The public repo is **code only**.
 
 ## 4. Current status
+**v0.9.6 (2026-10-20)** — audited the Phases tab against the CCL "15 Steps of Paper Charting at a
+Glance" sheet. Steps 4–8, 10, 11, 13 and 14 already matched exactly. Closed the three that did not:
+**menstrual flow is now recordable** (step 1 — which also makes `isBleeding()`'s `days.flow` branch
+live for the first time), the **Pre-Shift Six are numbered right to left** (step 9), and the
+**confirming temperatures are circled** (step 12). See §8 v0.9.6, including the deliberate step-5
+divergence and the `nfp.mucusPeak()` gap that is still open.
+
+**⚠️ PUSH NOTIFICATIONS ARE DEAD, and have been since 2026-07-20.** Everything below that calls push
+"BUILT / verified" is stale — do not trust it. `scripts/notify/package.json` was deleted as
+collateral damage in `5fb79b3` (v0.7.9, a commit about period logging), along with `CLAUDE.md`,
+`BACKLOG.md` and `README.md`. `notify.yml` runs `npm install` in `scripts/notify`, which now exits
+`ENOENT ... package.json`, so **every scheduled run since has failed** — 100 of the last 100,
+about 96 failures a day, no notification delivered in three months. The only green runs in the
+history are `pages-build-deployment`, not the notifier. Restore with
+`git show ee60302:scripts/notify/package.json > scripts/notify/package.json` (it is only
+`"type": "module"` + `firebase-admin ^12.7.0`), then check
+`gh run list -R scenicprints/juno -w "Juno notifications"`. Note §0 still tells every incoming
+agent to read `CLAUDE.md` and `BACKLOG.md`; both were deleted in the same commit and never restored.
+
 **v0.9.5 (2026-09-09)** — two real correctness bugs in `peakDay()`, both spotted by him on his own
 data ("why in aug 10 to sep 4 is sep 3rd the peak day"). **(1) Peak Day never locked:** the scan
 reassigned it on every peak-type day, so the LAST one in the cycle won, and one late wet/slippery
@@ -226,6 +245,50 @@ so **no notification ever fired for anyone** (the iPhone/Android were both regis
 **Fix:** use `db.collection('users').listDocuments()` (Admin SDK — includes missing docs). Verified:
 `users found: 1`, `2 registered device token(s)`, test send `2/2`. Never use `collection('users').get()`
 here. The notifier now logs users-found + per-user token counts — use `-f test=true` to diagnose.
+
+### v0.9.6 — the paper chart's steps 1, 9 and 12  ✅ BUILT (2026-10-20)
+Checked the Phases tab line by line against the CCL "15 Steps of Paper Charting at a Glance" sheet.
+The rule engine already matched steps 4–8, 10, 11, 13 and 14 exactly. Three steps were missing from
+what gets DRAWN — and one of them had no way to record its data at all.
+
+- **Step 1 — menstrual flow is recordable now.** A single-select chip row in the daily check-in
+  (Spotting / Light / Medium / Heavy → `days/{date}.flow`), drawn on the chart's menstruation row as
+  geometry, never glyphs: heavy a solid block, medium the cross that was always there, light one
+  stroke, spotting a dot. **This makes a dead branch live.** `isBleeding()` in `phases.js` has read
+  `days.flow` since v0.9.5, but nothing in the app ever wrote it, so bleeding was only ever detected
+  from the cycle's `endDate`. A day with a logged flow is now excluded from Peak Day detection, the
+  drying count and `firstMucusDay` — the same conservative direction v0.9.5 established.
+- **Step 9 — the Pre-Shift Six are numbered right to left** (rightmost = 1), above their dots. Six
+  adjacent one-digit labels do not fit at every density, so they are drawn only when
+  `dayW >= fPre * 1.2`; below that the existing ring still marks the six. Same discipline as
+  v0.9.4's header labels — never shrink below legible, drop labels instead. Crossover measured at
+  39 days (shown) / 40 days (hidden).
+- **Step 12 — the confirming temperatures are circled**, in the HTL's pink, so the chart shows its
+  work instead of only asserting the conclusion in the text readout. `phase3.parts.temps` has held
+  exactly these dates since v0.9.0 and `ui.js` simply never read it. Covers the four-temperature
+  case (a weak 3rd) too, which is step 13's fallback.
+
+**Deliberate divergence, do not re-litigate (step 5).** The sheet says to pick ONE rule for the end
+of Phase 1 — Day 5/6, Doering, or Last Dry Day — depending on how long you have been charting. Juno
+takes the EARLIEST of all applicable rules instead (see v0.9.0); its "mucus appeared" candidate is
+the Last Dry Day Rule under another name, same arithmetic. The practical effect is that **Phase 1
+often ends earlier in Juno than on a hand-drawn chart.** That is the conservative side and it needs
+no new setting, but it is the discrepancy to expect when the two are compared side by side.
+
+**Still divergent, NOT changed here:** `nfp.mucusPeak()` — which drives the Today banner, calendar
+shading and the notifier — never got v0.9.5's Peak Day lock or its bleeding exclusion. Only
+`phases.js:peakDay()` did. It errs SAFE (a late stray peak only holds the window open longer, never
+shorter), so this is not a false-safe, but the Phases tab and the Today banner can now disagree
+about which day Peak Day was. Changing it moves the safety window — decide deliberately, re-read §2.
+
+**Verified** with a Node harness that mounts the real `ui.js` against a minimal DOM shim and reads
+the rendered SVG back out (the v0.8.4 approach): 12 assertions on the `phases.js` rules including an
+A/B proving the new `flow` field is what excludes a bleeding-day mucus log, 13 on the rendered chart
+including the step-9 numbers reading 6,5,4,3,2,1 left to right, and a sweep over 9, 26, 28, 31, 34,
+39, 40, 45, 58, 74 and 121-day cycles — all clean, no NaN, numbering guard correct at every length.
+**That harness is NOT in the repo.** Committing one needs a root `package.json` with
+`"type": "module"` so Node will load `js/*.js` as ES modules. It is worth doing: there has never
+been a committed test here, and the "40-test suite" §4 refers to was always scratch-only.
 
 ### v0.9.5 — Peak Day locks, and a period is not peak mucus  ✅ BUILT (2026-09-09)
 He read the charts against his own data and found both of these. Neither was a display bug.

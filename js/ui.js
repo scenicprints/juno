@@ -9,7 +9,7 @@ import { cycleWindows, analyzeCycle, phaseOfDay } from './phases.js';
 import { enableNotifications, pushConfigured, permissionState } from './push.js';
 import { today, fmt, parse, addDays, addDaysStr, diffDays, prettyDate, monthLabel } from './dates.js';
 
-export const APP_VERSION = '0.9.5';
+export const APP_VERSION = '0.9.6';
 const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
 // Flat, tappable preset conditions (no typing). Stored in days/{date}.symptoms as label strings.
 const SYMPTOMS = [
@@ -22,7 +22,13 @@ const MUCUS_SENSATION = [
   { key: 'slippery', label: 'Slippery' }, { key: 'wetslippery', label: 'Wet/slippery' },
 ];
 const MUCUS_CHAR = [{ key: 'tacky', label: 'Tacky' }, { key: 'stretchy', label: 'Stretchy' }]; // none = default
-function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus || d.mucusSensation || d.mucusChar)); }
+// Menstrual flow - step 1 of the paper chart. Stored in days/{date}.flow. `isBleeding()` in
+// phases.js has always read this field; until now nothing ever wrote it, so that branch was dead.
+const FLOW = [
+  { key: 'spotting', label: 'Spotting' }, { key: 'light', label: 'Light' },
+  { key: 'medium', label: 'Medium' }, { key: 'heavy', label: 'Heavy' },
+];
+function hasLog(d) { return !!(d && (d.mood || (d.symptoms && d.symptoms.length) || d.note || d.tempF || d.mucus || d.mucusSensation || d.mucusChar || d.flow)); }
 
 // tiny DOM helper
 function el(tag, props = {}, kids = []) {
@@ -428,6 +434,16 @@ function checkInCard(dateStr) {
   });
   card.appendChild(chips);
 
+  // menstrual flow (step 1) — single-select, left blank on non-period days
+  card.appendChild(el('div', { class: 'field-label', text: 'Menstrual flow' }));
+  const frow = el('div', { class: 'chips' });
+  FLOW.forEach((f) => {
+    const on = day.flow === f.key;
+    frow.appendChild(el('button', { class: 'chip' + (on ? ' on' : ''),
+      onclick: () => _handlers.setDay(dateStr, { flow: on ? null : f.key }) }, [f.label]));
+  });
+  card.appendChild(frow);
+
   // cervical mucus — sensation (felt) + characteristic (seen), for the NFP peak-day sign
   card.appendChild(el('div', { class: 'field-label', text: 'Mucus sensation' }));
   const srow = el('div', { class: 'chips' });
@@ -623,6 +639,21 @@ function mucusMark(cx, cy, kind, r) {
   }
   return s;
 }
+// Menstrual flow as drawn geometry (step 1), same reasoning as mucusMark: a font glyph
+// carries its own side bearings and sits off-centre from its column. Heavy is solid,
+// medium the cross the chart has always drawn, light one stroke, spotting a dot.
+function flowMark(cx, cy, flow, r) {
+  const col = '#e0567f', w = 1.5;
+  const f = (n) => n.toFixed(1);
+  if (flow === 'heavy')
+    return `<rect x="${f(cx - r)}" y="${f(cy - r)}" width="${f(r * 2)}" height="${f(r * 2)}" fill="${col}"/>`;
+  if (flow === 'light')
+    return `<line x1="${f(cx - r)}" y1="${f(cy + r)}" x2="${f(cx + r)}" y2="${f(cy - r)}" stroke="${col}" stroke-width="${w}"/>`;
+  if (flow === 'spotting')
+    return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(Math.max(r * 0.45, 0.8))}" fill="${col}"/>`;
+  return `<line x1="${f(cx - r)}" y1="${f(cy - r)}" x2="${f(cx + r)}" y2="${f(cy + r)}" stroke="${col}" stroke-width="${w}"/>`
+       + `<line x1="${f(cx + r)}" y1="${f(cy - r)}" x2="${f(cx - r)}" y2="${f(cy + r)}" stroke="${col}" stroke-width="${w}"/>`;
+}
 function mucusKind(day) {
   if (!day) return null;
   if (isPeakMucus(day)) return 'peak';
@@ -656,6 +687,11 @@ function phaseChart(a, spans, cycle) {
   const labelled = (d) => (d - 1) % step === 0;
   const dotR = Math.min(Math.max(dayW * 0.2, 0.9), 4);
   const mucR = Math.min(Math.max(dayW * 0.3, 1.1), 6);
+  // Step 9 numbers the Pre-Shift Six right to left, so the rightmost is 1. Six adjacent
+  // one-digit labels only fit when the column is wide enough; below that the ring alone
+  // marks them rather than smearing six numbers together (same rule as the header rows).
+  const fPre = Math.min(Math.max(dayW * 0.75, 6), 8.5);
+  const showPreNums = dayW >= fPre * 1.2;
 
   const hBand = 21, hDay = rot ? 19 : 13, hDate = rot ? 19 : 12, hDow = 11, hBleed = 9, hPlot = 178, hMuc = 20, hPeak = 16;
   const yBand = 2, yDay = yBand + hBand, yDate = yDay + hDay, yDow = yDate + hDate;
@@ -676,6 +712,9 @@ function phaseChart(a, spans, cycle) {
   all.forEach((q) => { byDay[q.cycleDay] = q; });
   const days = _data.days || {};
   const periodEnd = cycle && cycle.endDate ? cycle.endDate : null;
+  // Step 12: the three (or, on a weak third, four) post-Peak temperatures above the LTL
+  // that carried Phase 3. The rule engine already picks them; the paper chart circles them.
+  const confirmSet = new Set((a.phase3.parts && a.phase3.parts.temps) || []);
 
   let g = `<svg viewBox="0 0 ${VB} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" `
         + `role="img" aria-label="Cycle chart, all three phases">`;
@@ -730,12 +769,12 @@ function phaseChart(a, spans, cycle) {
       g += `<text x="${xc(d).toFixed(1)}" y="${(yDow + 7).toFixed(1)}" text-anchor="middle" fill="#7a7296" font-size="${fDow}">${DOW[dt.getDay()]}</text>`;
       if (step > 1) g += `<line x1="${xc(d).toFixed(1)}" y1="${yPlot}" x2="${xc(d).toFixed(1)}" y2="${(yPlot + hPlot).toFixed(1)}" stroke="#2a2140" stroke-width="0.6"/>`;
     }
-    const bleeding = periodEnd ? date <= periodEnd : d === 1;
-    if (bleeding) {
-      const bx = xc(d), by = yBleed + 4, br = Math.min(dayW * 0.22, 3.2);
-      g += `<line x1="${(bx - br).toFixed(1)}" y1="${(by - br).toFixed(1)}" x2="${(bx + br).toFixed(1)}" y2="${(by + br).toFixed(1)}" stroke="#e0567f" stroke-width="1.5"/>`;
-      g += `<line x1="${(bx + br).toFixed(1)}" y1="${(by - br).toFixed(1)}" x2="${(bx - br).toFixed(1)}" y2="${(by + br).toFixed(1)}" stroke="#e0567f" stroke-width="1.5"/>`;
-    }
+    // menstruation row (step 1): the logged flow when there is one, otherwise the cross the
+    // period's own date range implies. A logged flow also makes isBleeding() true over in
+    // phases.js, which keeps that day's mucus out of the Peak Day rules.
+    const flow = (days[date] || {}).flow;
+    const bleeding = flow ? flow !== 'none' : (periodEnd ? date <= periodEnd : d === 1);
+    if (bleeding) g += flowMark(xc(d), yBleed + 4, flow, Math.min(dayW * 0.22, 3.2));
   }
 
   // temperature: unbroken runs only, so a day she did not chart leaves a real gap
@@ -757,10 +796,16 @@ function phaseChart(a, spans, cycle) {
       g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${dotR.toFixed(1)}" fill="#1b1430" stroke="#a99fc4" stroke-width="1.3"/>`;
       continue;
     }
-    const inPre = a.shift.preShiftSix.includes(q.date);
+    const preIdx = a.shift.preShiftSix.indexOf(q.date);
+    const inPre = preIdx >= 0;
     if (inPre) g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(dotR + 2.4).toFixed(1)}" fill="none" stroke="#c9a7ff" stroke-width="1.1"/>`;
+    // step 12 — the temperatures that carried Phase 3, ringed in the HTL's colour
+    if (confirmSet.has(q.date)) g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(dotR + 2.4).toFixed(1)}" fill="none" stroke="#f4b8d0" stroke-width="1.3"/>`;
     const fill = inPre ? '#c9a7ff' : (a.p3StartDay != null && d >= a.p3StartDay ? '#4fbf9f' : '#ffffff');
     g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${dotR.toFixed(1)}" fill="${fill}"/>`;
+    // step 9 — number the Pre-Shift Six right to left, so the rightmost is 1
+    if (inPre && showPreNums)
+      g += `<text x="${cx.toFixed(1)}" y="${(cy - dotR - 5).toFixed(1)}" text-anchor="middle" fill="#c9a7ff" font-size="${fPre}" font-weight="700">${6 - preIdx}</text>`;
   }
 
   // mucus row, then Peak Day and the numbered drying-up days
@@ -869,11 +914,15 @@ function viewPhases() {
   card.appendChild(tbl);
 
   const key = el('div', { class: 'legend chart-key' });
-  [['✕', 'Menstruation', '#e0567f'], ['mucus-none', 'No mucus', '#8d84a8'],
+  const keySvg = (inner) => el('span', { class: 'key-svg', html: `<svg viewBox="0 0 14 14" width="14" height="14">${inner}</svg>` });
+  [['flow', 'Menstrual flow', '#e0567f'], ['mucus-none', 'No mucus', '#8d84a8'],
    ['mucus-some', 'Less fertile', '#d6a8c8'], ['mucus-peak', 'More fertile', '#f4b8d0'],
-   ['P', 'Peak Day, then drying days 1 2 3', '#ffd76e']].forEach(([sym, label, c]) => {
-    const mark = sym.startsWith('mucus-')
-      ? el('span', { class: 'key-svg', html: `<svg viewBox="0 0 14 14" width="14" height="14">${mucusMark(7, 7, sym.slice(6), 5)}</svg>` })
+   ['P', 'Peak Day, then drying days 1 2 3', '#ffd76e'],
+   ['ring', 'Pre-Shift Six, numbered 6 to 1', '#c9a7ff'],
+   ['ring', 'The temperatures that confirmed Phase 3', '#f4b8d0']].forEach(([sym, label, c]) => {
+    const mark = sym.startsWith('mucus-') ? keySvg(mucusMark(7, 7, sym.slice(6), 5))
+      : sym === 'flow' ? keySvg(flowMark(7, 7, 'medium', 4.5))
+      : sym === 'ring' ? keySvg(`<circle cx="7" cy="7" r="5" fill="none" stroke="${c}" stroke-width="1.3"/><circle cx="7" cy="7" r="2" fill="#ffffff"/>`)
       : el('span', { class: 'key-sym', style: `color:${c}`, text: sym });
     key.appendChild(el('div', { class: 'leg' }, [mark, el('span', { text: label })]));
   });
