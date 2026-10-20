@@ -9,21 +9,27 @@ restored verbatim, would have told the next agent to go build features that ship
 conservative "can / cannot" fertility window. Default mode = **Avoid**. Web app / PWA on GitHub
 Pages, Firebase sync, no build step. The user considers the app **feature-complete** (v0.7.8).
 
+## Closed 2026-10-20 (kept briefly so the next agent does not reopen them)
+- [x] **`nfp.mucusPeak()` vs `phases.peakDay()` — settled in v0.9.8: do NOT unify them.** Measured
+      first: porting v0.9.5's lock into `mucusPeak()` collapses "safe again" by 17 days on a
+      realistic "wet most days" cycle — a false SAFE. `effectiveWindow()` cannot express "a new
+      mucus patch reopened the window", and the last-peak-day scan is how that gets represented.
+      The *display* was the real bug and is fixed: the Temperature card now quotes the same locked
+      Peak Day the Phases tab charts. Locked by `tests/invariants-safety.test.mjs`. See §8 v0.9.8.
+- [x] **Committed tests — done.** `tests/`, 70 tests, `node --test` from the repo root, no
+      dependencies, wired to CI in `.github/workflows/tests.yml`. Covers the degenerate shapes
+      (9/74/121-day cycles, mucus during a period, a late stray peak, a noisy series) and the
+      rendered chart via a DOM shim. Verified to FAIL when the v0.8.4/v0.9.5/v0.9.8 fixes are
+      reverted — keep that property when adding to it.
+
 ## Open — correctness
-- [ ] **`nfp.mucusPeak()` never got v0.9.5's fixes.** The Peak Day lock and the bleeding exclusion
-      landed in `phases.js:peakDay()` only. `nfp.mucusPeak()` drives the Today banner, the calendar
-      shading and the notifier, so the Phases tab and the Today banner can disagree about which day
-      Peak Day was. It errs **safe** (a late stray peak only holds the window open longer), so it is
-      not a false-safe — but fixing it **moves the safety window**. Re-read ROADMAP §2 first and
-      decide deliberately. See §8 v0.9.6.
-- [ ] **Committed tests — check `tests/` before assuming there are none.** A suite was being added
-      in a parallel session on 2026-10-20; if `tests/` and a root `package.json` exist, this item is
-      **done** and the open question is only coverage. Background: the "40-test suite" §4 refers to
-      was always scratch-only, and every bug in v0.9.2–v0.9.5 got through because the scratch
-      harnesses only held tidy textbook cycles. A committed suite needs a **root** `package.json`
-      with `"type": "module"` so Node loads `js/*.js` as ES modules. Whatever exists, make sure it
-      covers the degenerate shapes: 9, 74 and 121-day cycles, mucus logged during a period, a late
-      stray peak, a noisy temperature series.
+- [ ] **Paper chart step 3: the mucus LETTER is not drawn.** The chart draws the symbol (○ ⊖ ⊕)
+      but not the letter code beside it, which the CCL chart wants for sensation and
+      characteristic. Cosmetic, finishes the step-by-step match. See §8 v0.9.6.
+- [ ] **Paper chart step 8: the LTL scan is not anchored near Peak Day.** `thermalShift()` takes the
+      FIRST qualifying rise in the cycle, independent of Peak Day; the sheet says to look close to
+      Peak Day. Phase 3 itself is fine (`stTemps()` does filter to post-Peak temps), so this only
+      skews the LTL line, and only on a messy series with an early false rise.
 
 ## Open — notifications
 - [ ] **The `*/15` cron does not run every 15 minutes.** Measured 2026-10-20: ~5 runs/day, hours
@@ -35,11 +41,22 @@ Pages, Firebase sync, no build step. The user considers the app **feature-comple
       the honest fix is a product call: widening the window means a "take your temperature right
       after waking" push can arrive at 2pm, which is worse than silence. Options: widen to ~90 min
       and accept late-but-plausible; drop the feature; or move the notifier off GitHub cron.
+      **A fourth option, probably the best:** fire on the FIRST run at/after the target local time
+      each day, de-duped by local date — exactly the mechanism the daily digest already uses
+      successfully — but skip it entirely if that run lands more than ~2-3h late. That turns "must
+      hit a 20-minute window" into "most mornings, or not at all", with no 2pm nonsense. Re-measure
+      the real cadence first: `gh run list -R scenicprints/juno -w "Juno notifications" -L 100`
+      grouped by day. Measured 2026-10-20: **4-6 runs/day.**
 - [ ] **Only one phone is registered for push.** There were two; on 2026-10-20 the second one's
       token was stale (test send `1/2`), the notifier auto-pruned it, and the next run was a clean
       `1/1`. Whichever phone stopped getting notifications has to re-enable under Settings →
       Notifications → Turn on notifications (iPhone must be installed to the Home Screen first).
       Nothing in the app surfaces "this device is no longer registered", which is worth fixing.
+      **Concrete fix:** on app load, when `Notification.permission === 'granted'` and
+      `pushConfigured()`, silently re-run `getToken` + `saveToken` (idempotent, `arrayUnion`).
+      That would have re-registered the pruned phone by itself the next time it was opened.
+      `push.js:enableNotifications()` already does all of this — it just needs a quiet path that
+      skips the permission prompt and the toasts.
 
 ## Open — small / later
 - [ ] Use temperatures to **narrow the next-period prediction** (today they only gate the
